@@ -494,7 +494,8 @@ def llm_map_unknown_fields(sample_rows: list, schema_name: str, sheet_name: str)
     it is not surfaced in any UI panel.
     """
     from config.schemas import SCHEMAS
-    cache_key = f"_llm_fieldmap_{sheet_name}_{schema_name}"
+    _file_hash = st.session_state.get("current_file_hash", "")
+    cache_key = f"_llm_fieldmap_{_file_hash}_{sheet_name}_{schema_name}"
     if st.session_state.get(cache_key):
         return st.session_state[cache_key]
     if not _llm_available() or not sample_rows:

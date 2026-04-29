@@ -170,7 +170,8 @@ def _render_plain_mode(
     if not _plain_col_rename and active.get("data"):
         from modules.schema_mapping import _has_unknown_fields, llm_map_unknown_fields
         from modules.llm import _llm_available
-        _llm_plain_cache_key = f"_llm_fieldmap_{selected_sheet}_plain"
+        _file_hash = st.session_state.get("current_file_hash", "")
+        _llm_plain_cache_key = f"_llm_fieldmap_{_file_hash}_{selected_sheet}_plain"
         if _llm_available():
             _llm_plain_result = st.session_state.get(_llm_plain_cache_key)
             if _llm_plain_result is None:

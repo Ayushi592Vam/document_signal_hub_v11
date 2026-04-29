@@ -1,47 +1,9 @@
 {
-  "cccf70c0dfe1396bae5bb61c8717a9818d9c4e4062962690ad3b28b7ce525acd": {
-    "filename": "messy sample.xlsx",
-    "first_seen": "2026-04-29T12:07:01.654973",
-    "sheet_hashes": {
-      "Loss Detail 2025": "b517575b4ae79315121e0f3a3fdd2b80b6c1c7338353ee44f70af5e89159f4c6",
-      "Loss Detail 2024": "ed815eae0a515bbde1de29e7cdf6474ba434cbbae921ea89902400d46b7a2dc9",
-      "Loss Detail 2023": "d1f2da51a2515b9ab39bb0b827bd2765500444b3b71d4002cd0e686b20cbcfb4",
-      "Loss Detail 2022": "5fe5c59f74e8ac7158e74e3c5439ace0a2e2e23856763bf60c6d3a6ea63d47cf"
-    }
-  },
   "e7b83886392f50f3edd3ddca4b347e468b7ab78a7c232f19aec93dc620895820": {
     "filename": "Medical_Bill_Statement.pdf",
-    "first_seen": "2026-04-29T12:09:43.985524",
+    "first_seen": "2026-04-29T17:00:05.877077",
     "sheet_hashes": {
       "Page 1": "f1ccfd99a00c3af56116cc4d3559002ff20dfb084f93ee74dc917c62f1096d1d"
-    }
-  },
-  "6cf6cf065c03a5392f5b5a518406c962452a00ea4a191685ba4622d2dd7b9627": {
-    "filename": "Medical_Invoice.pdf",
-    "first_seen": "2026-04-29T12:15:12.531874",
-    "sheet_hashes": {
-      "Page 1": "b9e7b51ec0e4fec6d237bbaf2a0d7632de15bc77185ceba880a984bd299780a2"
-    }
-  },
-  "ba9f17bbeeb8cd2abac2aa85476c2244425c9955e7baa69bd773ebc7d3c9edd4": {
-    "filename": "Legal_Civil_Complaint.pdf",
-    "first_seen": "2026-04-29T12:40:41.592061",
-    "sheet_hashes": {
-      "Page 1": "48b1c7c0abbc566158f6c68039b81c67f579dc0b97848d0905b0427870f8ba0f"
-    }
-  },
-  "8be735012f47256d00ea7b70ec4ffc0b6125b542fb1193aaaff110ce190fa52a": {
-    "filename": "fnol2.txt",
-    "first_seen": "2026-04-29T12:45:20.531326",
-    "sheet_hashes": {
-      "Transcript": "8be735012f47256d00ea7b70ec4ffc0b6125b542fb1193aaaff110ce190fa52a"
-    }
-  },
-  "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b": {
-    "filename": "FNOL Transcript.txt",
-    "first_seen": "2026-04-29T12:47:19.475403",
-    "sheet_hashes": {
-      "Transcript": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b"
     }
   }
 }

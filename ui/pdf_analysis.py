@@ -4048,20 +4048,6 @@ def _compute_cost(entry: dict) -> float:
 
 
 def _render_llm_cost_tab() -> None:
-    """
-    FEATURE C — LLM Cost Dashboard.
-
-    Reads token usage from st.session_state["_llm_cost_log"]:
-      List of dicts, each with keys:
-        task             : str   (e.g. "Entity Extraction", "Summary Generation")
-        model            : str   (e.g. "gpt-4o-mini")
-        prompt_tokens    : int
-        completion_tokens: int
-        timestamp        : str   (ISO-8601, optional)
-        doc_name         : str   (optional — which document this call was for)
-
-    If _llm_cost_log is absent the tab shows setup instructions.
-    """
     st.markdown(_section_header("LLM Cost Dashboard", "token usage & estimated spend"), unsafe_allow_html=True)
 
     log: list[dict] = st.session_state.get("_llm_cost_log", [])
@@ -4088,15 +4074,12 @@ def _render_llm_cost_tab() -> None:
             f"</div></div>",
             unsafe_allow_html=True,
         )
-
-        # Show wiring example
         with st.expander("📋 How to wire up cost logging"):
             st.code(
                 '''# Add this to your LLM call wrapper (e.g. in modules/pdf_intelligence.py)
 import streamlit as st
 
 def _log_llm_cost(task: str, model: str, response) -> None:
-    """Append a cost entry after every OpenAI API call."""
     usage = getattr(response, "usage", None)
     if not usage:
         return
@@ -4111,15 +4094,11 @@ def _log_llm_cost(task: str, model: str, response) -> None:
         "doc_name":         st.session_state.get("_file_name", ""),
     })
 
-# Then call it right after your API call:
 response = client.chat.completions.create(...)
 _log_llm_cost("Entity Extraction", deployment, response)
 ''',
                 language="python",
             )
-        
-        
-        # ── Show ADI cost even when LLM log is empty ──────────────────────
         adi_log_early: list[dict] = st.session_state.get("_adi_cost_log", [])
         if adi_log_early:
             st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
@@ -4130,25 +4109,47 @@ _log_llm_cost("Entity Extraction", deployment, response)
                 f"<div style='background:{_BG2};border:1px solid #bae6fd;"
                 f"border-left:4px solid #0284c7;border-radius:8px;padding:14px 16px;'>"
                 f"<div style='font-size:12px;font-family:monospace;color:{_TXT};'>"
-                 f"📄 {len(adi_log_early)} ADI call(s) · {adi_total_pages} page(s) · "
+                f"📄 {len(adi_log_early)} ADI call(s) · {adi_total_pages} page(s) · "
                 f"<strong>${adi_total_cost:.4f}</strong> estimated ADI cost</div>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
-        return  # ← return stays, just moved to after the ADI check
+        return
 
-    # ── Compute totals ────────────────────────────────────────────────────────
+    # ── Define all data up front ──────────────────────────────────────────────
+    current_doc = st.session_state.get("_file_name", "")
+    adi_log: list[dict] = st.session_state.get("_adi_cost_log", [])
+
+    doc_log = [e for e in log if e.get("doc_name", "") == current_doc] if current_doc else []
+
+    if doc_log:
+        doc_prompt     = sum(int(e.get("prompt_tokens", 0))     for e in doc_log)
+        doc_completion = sum(int(e.get("completion_tokens", 0)) for e in doc_log)
+        doc_tokens     = doc_prompt + doc_completion
+        doc_cost       = sum(_compute_cost(e) for e in doc_log)
+        doc_calls      = len(doc_log)
+    else:
+        doc_prompt = doc_completion = doc_tokens = doc_cost = doc_calls = 0
+
+    adi_log_cur   = [e for e in adi_log if e.get("doc_name", "") == current_doc]
+    adi_cur_pages = sum(int(e.get("pages", 0))   for e in adi_log_cur)
+    adi_cur_cost  = sum(float(e.get("cost", 0))  for e in adi_log_cur)
+
     total_prompt     = sum(int(e.get("prompt_tokens", 0))     for e in log)
     total_completion = sum(int(e.get("completion_tokens", 0)) for e in log)
     total_tokens     = total_prompt + total_completion
     total_cost       = sum(_compute_cost(e) for e in log)
     call_count       = len(log)
+    avg_cost         = total_cost / call_count if call_count else 0.0
+
+    adi_total_pages = sum(int(e.get("pages", 0))   for e in adi_log)
+    adi_total_cost  = sum(float(e.get("cost", 0))  for e in adi_log)
+    adi_calls       = len(adi_log)
 
     # ── Hero header ───────────────────────────────────────────────────────────
-    avg_cost = total_cost / call_count if call_count else 0.0
     st.markdown(
-        f"<div style='background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 50%,#bfdbfe 100%);border:1px solid #93c5fd;"
-        f"border-radius:12px;padding:24px 28px;margin-bottom:24px;"
+        f"<div style='background:linear-gradient(135deg,#eff6ff 0%,#dbeafe 50%,#bfdbfe 100%);"
+        f"border:1px solid #93c5fd;border-radius:12px;padding:24px 28px;margin-bottom:24px;"
         f"box-shadow:0 4px 24px rgba(30,27,75,0.18);'>"
         f"<div style='display:flex;align-items:center;justify-content:space-between;'>"
         f"<div>"
@@ -4163,22 +4164,95 @@ _log_llm_cost("Entity Extraction", deployment, response)
         f"text-transform:uppercase;letter-spacing:1px;'>Session Total</div>"
         f"<div style='font-size:28px;font-weight:900;color:#059669;"
         f"font-family:monospace;'>${total_cost:.4f}</div>"
-        f"</div>"
-        f"</div></div>",
+        f"</div></div></div>",
         unsafe_allow_html=True,
     )
 
-    # ── Summary KPI cards ─────────────────────────────────────────────────────
+    # ── Current file section ──────────────────────────────────────────────────
+    if doc_log or adi_log_cur:
+        st.markdown(
+            f"<div style='font-size:11px;font-weight:800;color:#1e293b;"
+            f"font-family:monospace;text-transform:uppercase;letter-spacing:2px;"
+            f"margin-bottom:10px;'>📄 Current File — {current_doc}</div>",
+            unsafe_allow_html=True,
+        )
+
+    if doc_log:
+        dk1, dk2, dk3, dk4 = st.columns(4)
+        for col, icon, label, value, sub, grad, border in [
+            (dk1, "🔁", "LLM CALLS",     str(doc_calls),   "this file",
+             "linear-gradient(135deg,#eff6ff,#dbeafe)", "#2563eb"),
+            (dk2, "🪙", "PROMPT TOKENS", f"{doc_prompt:,}", "input tokens",
+             "linear-gradient(135deg,#f5f3ff,#ede9fe)", "#7c3aed"),
+            (dk3, "📤", "OUTPUT TOKENS", f"{doc_completion:,}", "completion tokens",
+             "linear-gradient(135deg,#fdf4ff,#fae8ff)", "#a855f7"),
+            (dk4, "💰", "FILE COST",     f"${doc_cost:.4f}", f"total tokens: {doc_tokens:,}",
+             "linear-gradient(135deg,#fefce8,#fef9c3)", "#ca8a04"),
+        ]:
+            with col:
+                st.markdown(
+                    f"<div style='background:{grad};border:1px solid {border}30;"
+                    f"border-radius:10px;padding:16px;text-align:center;"
+                    f"box-shadow:0 2px 8px {border}15;margin-bottom:4px;'>"
+                    f"<div style='font-size:20px;margin-bottom:4px;'>{icon}</div>"
+                    f"<div style='font-size:9px;color:#334155;font-family:monospace;"
+                    f"text-transform:uppercase;letter-spacing:1.5px;font-weight:700;'>{label}</div>"
+                    f"<div style='font-size:22px;font-weight:900;color:{border};"
+                    f"font-family:monospace;margin:6px 0;'>{value}</div>"
+                    f"<div style='font-size:10px;color:#475569;font-family:monospace;'>{sub}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+    if adi_log_cur:
+        ac1, ac2, ac3 = st.columns(3)
+        for col, icon, label, value, sub, grad, border in [
+            (ac1, "📄", "ADI CALLS",     str(len(adi_log_cur)), "this file",
+             "linear-gradient(135deg,#e0f2fe,#bae6fd)", "#0284c7"),
+            (ac2, "📃", "ADI PAGES",     str(adi_cur_pages),
+             f"@ ${float(os.environ.get('ADI_PRICE_PER_PAGE','0.01')):.3f}/page",
+             "linear-gradient(135deg,#f5f3ff,#ede9fe)", "#7c3aed"),
+            (ac3, "💰", "ADI FILE COST", f"${adi_cur_cost:.4f}",
+             f"LLM+ADI: ${doc_cost + adi_cur_cost:.4f}",
+             "linear-gradient(135deg,#f0fdf4,#dcfce7)", "#059669"),
+        ]:
+            with col:
+                st.markdown(
+                    f"<div style='background:{grad};border:1px solid {border}30;"
+                    f"border-radius:10px;padding:16px;text-align:center;"
+                    f"box-shadow:0 2px 8px {border}15;margin-bottom:4px;'>"
+                    f"<div style='font-size:20px;margin-bottom:4px;'>{icon}</div>"
+                    f"<div style='font-size:9px;color:#334155;font-family:monospace;"
+                    f"text-transform:uppercase;letter-spacing:1.5px;font-weight:700;'>{label}</div>"
+                    f"<div style='font-size:22px;font-weight:900;color:{border};"
+                    f"font-family:monospace;margin:6px 0;'>{value}</div>"
+                    f"<div style='font-size:10px;color:#475569;font-family:monospace;'>{sub}</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+    if doc_log or adi_log_cur:
+        st.markdown(
+            f"<div style='height:1px;background:linear-gradient(90deg,#bfdbfe,transparent);"
+            f"margin:12px 0 24px 0;'></div>",
+            unsafe_allow_html=True,
+        )
+
+    # ── Session KPI cards ─────────────────────────────────────────────────────
+    st.markdown(
+        f"<div style='font-size:11px;font-weight:800;color:#1e293b;"
+        f"font-family:monospace;text-transform:uppercase;letter-spacing:2px;"
+        f"margin-bottom:10px;'>🕐 Session Total</div>",
+        unsafe_allow_html=True,
+    )
     k1, k2, k3, k4 = st.columns(4)
     for col, icon, label, value, sub, grad, border in [
-        (k1, "🔁", "API CALLS",    str(call_count),
-         "this session",
+        (k1, "🔁", "LLM CALLS",    str(call_count),       "this session",
          "linear-gradient(135deg,#eff6ff,#dbeafe)", "#2563eb"),
         (k2, "🪙", "TOTAL TOKENS", f"{total_tokens:,}",
          f"↑{total_prompt:,} in · ↓{total_completion:,} out",
          "linear-gradient(135deg,#f5f3ff,#ede9fe)", "#7c3aed"),
-        (k3, "💵", "LLM COST",     f"${total_cost:.4f}",
-         f"≈ {total_cost*100:.2f}¢",
+        (k3, "💵", "LLM COST",     f"${total_cost:.4f}",  f"≈ {total_cost*100:.2f}¢",
          "linear-gradient(135deg,#f0fdf4,#dcfce7)", "#16a34a"),
         (k4, "📊", "AVG / CALL",   f"${avg_cost:.4f}",
          f"avg tokens: {total_tokens//call_count if call_count else 0:,}",
@@ -4199,25 +4273,19 @@ _log_llm_cost("Entity Extraction", deployment, response)
                 unsafe_allow_html=True,
             )
 
-    # ── ADI Cost Section ──────────────────────────────────────────────────────
-    adi_log: list[dict] = st.session_state.get("_adi_cost_log", [])
+    # ── Session ADI cards ─────────────────────────────────────────────────────
     if adi_log:
         st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
         st.markdown(_section_header("Azure Document Intelligence Cost", "per-page processing"), unsafe_allow_html=True)
-
-        adi_total_pages = sum(int(e.get("pages", 0)) for e in adi_log)
-        adi_total_cost  = sum(float(e.get("cost", 0)) for e in adi_log)
-        adi_calls       = len(adi_log)
-
         a1, a2, a3 = st.columns(3)
         for col, icon, label, value, sub, grad, border in [
-            (a1, "📄", "ADI API CALLS",    str(adi_calls),
+            (a1, "📄", "ADI API CALLS", str(adi_calls),
              "calls to prebuilt-document model",
              "linear-gradient(135deg,#e0f2fe,#bae6fd)", "#0284c7"),
-            (a2, "📃", "TOTAL PAGES",      str(adi_total_pages),
+            (a2, "📃", "TOTAL PAGES",   str(adi_total_pages),
              f"@ ${float(os.environ.get('ADI_PRICE_PER_PAGE','0.01')):.3f}/page",
              "linear-gradient(135deg,#f5f3ff,#ede9fe)", "#7c3aed"),
-            (a3, "💰", "ADI EST. COST",    f"${adi_total_cost:.4f}",
+            (a3, "💰", "ADI EST. COST", f"${adi_total_cost:.4f}",
              f"LLM+ADI combined: ${total_cost + adi_total_cost:.4f}",
              "linear-gradient(135deg,#f0fdf4,#dcfce7)", "#059669"),
         ]:
@@ -4235,57 +4303,129 @@ _log_llm_cost("Entity Extraction", deployment, response)
                     f"</div>",
                     unsafe_allow_html=True,
                 )
-
-        # Per-doc ADI log
         for e in reversed(adi_log[-10:]):
-            e_ts  = (e.get("timestamp", "")[:19] or "").replace("T", " ")
-            e_doc = e.get("doc_name", "")
-            e_pg  = int(e.get("pages", 0))
+            e_ts   = (e.get("timestamp", "")[:19] or "").replace("T", " ")
+            e_doc  = e.get("doc_name", "")
+            e_pg   = int(e.get("pages", 0))
             e_cost = float(e.get("cost", 0))
             st.markdown(
-                f"<div style='background:{_BG};border:1px solid {_BORDER};"
+                f"<div style='background:#f8fafc;border:1px solid #e2e8f0;"
                 f"border-left:4px solid #0284c7;border-radius:6px;"
                 f"padding:10px 14px;margin-bottom:6px;"
                 f"display:flex;align-items:center;gap:12px;flex-wrap:wrap;'>"
                 f"<span style='font-size:10px;font-weight:700;color:#0284c7;"
                 f"font-family:monospace;background:#e0f2fe;border:1px solid #bae6fd;"
                 f"border-radius:4px;padding:2px 8px;'>Azure DI</span>"
-                f"<span style='font-size:10px;color:{_LBL};font-family:monospace;'>📄 {e_doc}</span>"
-                f"<span style='font-size:10px;color:{_LBL};font-family:monospace;'>{e_pg} page(s)</span>"
-                f"<span style='font-size:10px;color:{_LBL};font-family:monospace;'>⏱ {e_ts}</span>"
+                f"<span style='font-size:10px;color:#64748b;font-family:monospace;'>📄 {e_doc}</span>"
+                f"<span style='font-size:10px;color:#64748b;font-family:monospace;'>{e_pg} page(s)</span>"
+                f"<span style='font-size:10px;color:#64748b;font-family:monospace;'>⏱ {e_ts}</span>"
                 f"<span style='margin-left:auto;font-size:11px;font-weight:700;"
                 f"color:#059669;background:#f0fdf4;border:1px solid #bbf7d060;"
                 f"border-radius:12px;padding:2px 10px;font-family:monospace;'>"
                 f"${e_cost:.4f}</span>"
                 f"</div>",
                 unsafe_allow_html=True,
-            )    
+            )
 
-    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+    st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
 
-    
-    
-    # ── Per-task breakdown table ───────────────────────────────────────────────
-    from collections import defaultdict
-    task_groups: dict[str, list[dict]] = defaultdict(list)
-    for e in log:
-        task_groups[e.get("task", "Unknown")].append(e)
+    # ── Current file per-task table ───────────────────────────────────────────
+    if doc_log:
+        from collections import defaultdict as _dd
+        doc_task_groups: dict = _dd(list)
+        for e in doc_log:
+            doc_task_groups[e.get("task", "Unknown")].append(e)
+        doc_sorted = sorted(doc_task_groups.items(),
+                            key=lambda x: sum(_compute_cost(e) for e in x[1]), reverse=True)
+        _TASK_COLORS_DOC = ["#2563eb","#7c3aed","#059669","#dc2626",
+                            "#ca8a04","#0284c7","#db2777","#16a34a"]
+        doc_task_color_map: dict = {}
+        for i, (tn, _) in enumerate(doc_sorted):
+            doc_task_color_map[tn] = _TASK_COLORS_DOC[i % len(_TASK_COLORS_DOC)]
 
-    sorted_tasks = sorted(
-        task_groups.items(),
-        key=lambda x: sum(_compute_cost(e) for e in x[1]),
-        reverse=True,
-    )
-
-    # Build full table as one HTML block
-    header_cells = ""
-    for col in ["Task", "Model", "Calls", "Prompt Tokens", "Compl. Tokens", "Cost", "% of Total"]:
-        header_cells += (
+        header_cells_doc = "".join(
             f"<th style='padding:12px 16px;text-align:left;font-size:12px;"
             f"font-weight:700;color:#ffffff;font-family:monospace;"
             f"text-transform:uppercase;letter-spacing:1px;"
             f"border-right:1px solid #334155;white-space:nowrap;'>{col}</th>"
+            for col in ["Task","Model","Calls","Prompt Tokens","Compl. Tokens","Cost","% of File"]
         )
+
+        rows_doc = ""
+        for i, (task_name, entries) in enumerate(doc_sorted):
+            t_pt   = sum(int(e.get("prompt_tokens", 0))     for e in entries)
+            t_ct   = sum(int(e.get("completion_tokens", 0)) for e in entries)
+            t_cost = sum(_compute_cost(e) for e in entries)
+            t_n    = len(entries)
+            models = list(dict.fromkeys(e.get("model", "?") for e in entries))
+            mstr   = ", ".join(models[:2]) + ("..." if len(models) > 2 else "")
+            pct    = (t_cost / doc_cost * 100) if doc_cost > 0 else 0
+            row_bg = "#ffffff" if i % 2 == 0 else "#f8fafc"
+            cc     = "#16a34a" if t_cost < 0.01 else "#d97706" if t_cost < 0.05 else "#dc2626"
+            pc     = "#16a34a" if pct < 30 else "#d97706" if pct < 60 else "#dc2626"
+            tc     = doc_task_color_map.get(task_name, "#64748b")
+            rows_doc += (
+                f"<tr style='background:{row_bg};'>"
+                f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;'>"
+                f"<div style='font-size:14px;font-weight:700;color:#0f172a;font-family:monospace;'>{task_name}</div>"
+                f"<div style='height:3px;background:#e2e8f0;border-radius:2px;width:80%;margin-top:6px;overflow:hidden;'>"
+                f"<div style='height:100%;width:{pct:.0f}%;background:{tc};border-radius:2px;'></div></div></td>"
+                f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;font-size:13px;font-weight:500;color:#334155;font-family:monospace;'>{mstr}</td>"
+                f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;font-size:15px;font-weight:800;color:#2563eb;font-family:monospace;text-align:center;'>{t_n}</td>"
+                f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;font-size:14px;font-weight:600;color:#475569;font-family:monospace;text-align:right;'>{t_pt:,}</td>"
+                f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;font-size:14px;font-weight:600;color:#475569;font-family:monospace;text-align:right;'>{t_ct:,}</td>"
+                f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;font-size:15px;font-weight:800;color:{cc};font-family:monospace;text-align:right;'>${t_cost:.4f}</td>"
+                f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;font-size:14px;font-weight:700;color:{pc};font-family:monospace;text-align:right;'>{pct:.1f}%</td>"
+                f"</tr>"
+            )
+
+        total_row_doc = (
+            f"<tr style='background:#1e293b;'>"
+            f"<td style='padding:14px 16px;border-right:1px solid #334155;font-size:14px;font-weight:900;color:#ffffff;font-family:monospace;text-transform:uppercase;'>Total</td>"
+            f"<td style='padding:14px 16px;border-right:1px solid #334155;'></td>"
+            f"<td style='padding:14px 16px;border-right:1px solid #334155;font-size:15px;font-weight:900;color:#93c5fd;font-family:monospace;text-align:center;'>{doc_calls}</td>"
+            f"<td style='padding:14px 16px;border-right:1px solid #334155;font-size:14px;font-weight:700;color:#93c5fd;font-family:monospace;text-align:right;'>{doc_prompt:,}</td>"
+            f"<td style='padding:14px 16px;border-right:1px solid #334155;font-size:14px;font-weight:700;color:#93c5fd;font-family:monospace;text-align:right;'>{doc_completion:,}</td>"
+            f"<td style='padding:14px 16px;border-right:1px solid #334155;font-size:15px;font-weight:900;color:#4ade80;font-family:monospace;text-align:right;'>${doc_cost:.4f}</td>"
+            f"<td style='padding:14px 16px;font-size:14px;font-weight:700;color:#4ade80;font-family:monospace;text-align:right;'>100%</td>"
+            f"</tr>"
+        )
+
+        st.markdown(
+            f"<div style='margin-bottom:20px;'>"
+            f"<div style='font-size:13px;font-weight:800;color:#1e293b;"
+            f"font-family:monospace;text-transform:uppercase;letter-spacing:2px;"
+            f"margin-bottom:14px;'>Per-Task Breakdown — Current File</div>"
+            f"<div style='border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;'>"
+            f"<table style='width:100%;border-collapse:collapse;'>"
+            f"<thead><tr style='background:#1e293b;'>{header_cells_doc}</tr></thead>"
+            f"<tbody>{rows_doc}</tbody>"
+            f"<tfoot>{total_row_doc}</tfoot>"
+            f"</table></div></div>",
+            unsafe_allow_html=True,
+        )
+
+        st.markdown(
+            f"<div style='height:1px;background:linear-gradient(90deg,#bfdbfe,transparent);"
+            f"margin-bottom:24px;'></div>",
+            unsafe_allow_html=True,
+        )
+
+    # ── Session per-task table ────────────────────────────────────────────────
+    from collections import defaultdict
+    task_groups: dict[str, list[dict]] = defaultdict(list)
+    for e in log:
+        task_groups[e.get("task", "Unknown")].append(e)
+    sorted_tasks = sorted(task_groups.items(),
+                          key=lambda x: sum(_compute_cost(e) for e in x[1]), reverse=True)
+
+    header_cells = "".join(
+        f"<th style='padding:12px 16px;text-align:left;font-size:12px;"
+        f"font-weight:700;color:#ffffff;font-family:monospace;"
+        f"text-transform:uppercase;letter-spacing:1px;"
+        f"border-right:1px solid #334155;white-space:nowrap;'>{col}</th>"
+        for col in ["Task","Model","Calls","Prompt Tokens","Compl. Tokens","Cost","% of Total"]
+    )
 
     rows_html = ""
     for i, (task_name, entries) in enumerate(sorted_tasks):
@@ -4299,76 +4439,30 @@ _log_llm_cost("Entity Extraction", deployment, response)
         row_bg       = "#ffffff" if i % 2 == 0 else "#f8fafc"
         cost_color   = "#16a34a" if t_cost < 0.01 else "#d97706" if t_cost < 0.05 else "#dc2626"
         pct_color    = "#16a34a" if pct < 30 else "#d97706" if pct < 60 else "#dc2626"
-
         rows_html += (
             f"<tr style='background:{row_bg};'>"
-
-            # Task
-            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;"
-            f"border-right:1px solid #e2e8f0;'>"
-            f"<div style='font-size:14px;font-weight:700;color:#0f172a;"
-            f"font-family:monospace;'>{task_name}</div>"
-            f"<div style='height:3px;background:#e2e8f0;border-radius:2px;"
-            f"width:80%;margin-top:6px;overflow:hidden;'>"
-            f"<div style='height:100%;width:{pct:.0f}%;background:{pct_color};"
-            f"border-radius:2px;'></div></div>"
-            f"</td>"
-
-            # Model
-            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;"
-            f"border-right:1px solid #e2e8f0;font-size:13px;font-weight:500;"
-            f"color:#334155;font-family:monospace;'>{model_str}</td>"
-
-            # Calls
-            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;"
-            f"border-right:1px solid #e2e8f0;font-size:15px;font-weight:800;"
-            f"color:#2563eb;font-family:monospace;text-align:center;'>{t_calls}</td>"
-
-            # Prompt tokens
-            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;"
-            f"border-right:1px solid #e2e8f0;font-size:14px;font-weight:600;"
-            f"color:#475569;font-family:monospace;text-align:right;'>{t_prompt:,}</td>"
-
-            # Completion tokens
-            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;"
-            f"border-right:1px solid #e2e8f0;font-size:14px;font-weight:600;"
-            f"color:#475569;font-family:monospace;text-align:right;'>{t_completion:,}</td>"
-
-            # Cost
-            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;"
-            f"border-right:1px solid #e2e8f0;font-size:15px;font-weight:800;"
-            f"color:{cost_color};font-family:monospace;text-align:right;'>${t_cost:.4f}</td>"
-
-            # % of total
-            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;"
-            f"font-size:14px;font-weight:700;color:{pct_color};"
-            f"font-family:monospace;text-align:right;'>{pct:.1f}%</td>"
-
+            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;'>"
+            f"<div style='font-size:14px;font-weight:700;color:#0f172a;font-family:monospace;'>{task_name}</div>"
+            f"<div style='height:3px;background:#e2e8f0;border-radius:2px;width:80%;margin-top:6px;overflow:hidden;'>"
+            f"<div style='height:100%;width:{pct:.0f}%;background:{pct_color};border-radius:2px;'></div></div></td>"
+            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;font-size:13px;font-weight:500;color:#334155;font-family:monospace;'>{model_str}</td>"
+            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;font-size:15px;font-weight:800;color:#2563eb;font-family:monospace;text-align:center;'>{t_calls}</td>"
+            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;font-size:14px;font-weight:600;color:#475569;font-family:monospace;text-align:right;'>{t_prompt:,}</td>"
+            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;font-size:14px;font-weight:600;color:#475569;font-family:monospace;text-align:right;'>{t_completion:,}</td>"
+            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;border-right:1px solid #e2e8f0;font-size:15px;font-weight:800;color:{cost_color};font-family:monospace;text-align:right;'>${t_cost:.4f}</td>"
+            f"<td style='padding:13px 16px;border-bottom:1px solid #e2e8f0;font-size:14px;font-weight:700;color:{pct_color};font-family:monospace;text-align:right;'>{pct:.1f}%</td>"
             f"</tr>"
         )
 
-    # Total row
     total_row = (
         f"<tr style='background:#1e293b;'>"
-        f"<td style='padding:14px 16px;border-right:1px solid #334155;"
-        f"font-size:14px;font-weight:900;color:#ffffff;"
-        f"font-family:monospace;text-transform:uppercase;letter-spacing:1px;'>Total</td>"
+        f"<td style='padding:14px 16px;border-right:1px solid #334155;font-size:14px;font-weight:900;color:#ffffff;font-family:monospace;text-transform:uppercase;letter-spacing:1px;'>Total</td>"
         f"<td style='padding:14px 16px;border-right:1px solid #334155;'></td>"
-        f"<td style='padding:14px 16px;border-right:1px solid #334155;"
-        f"font-size:15px;font-weight:900;color:#93c5fd;"
-        f"font-family:monospace;text-align:center;'>{call_count}</td>"
-        f"<td style='padding:14px 16px;border-right:1px solid #334155;"
-        f"font-size:14px;font-weight:700;color:#93c5fd;"
-        f"font-family:monospace;text-align:right;'>{total_prompt:,}</td>"
-        f"<td style='padding:14px 16px;border-right:1px solid #334155;"
-        f"font-size:14px;font-weight:700;color:#93c5fd;"
-        f"font-family:monospace;text-align:right;'>{total_completion:,}</td>"
-        f"<td style='padding:14px 16px;border-right:1px solid #334155;"
-        f"font-size:15px;font-weight:900;color:#4ade80;"
-        f"font-family:monospace;text-align:right;'>${total_cost:.4f}</td>"
-        f"<td style='padding:14px 16px;"
-        f"font-size:14px;font-weight:700;color:#4ade80;"
-        f"font-family:monospace;text-align:right;'>100%</td>"
+        f"<td style='padding:14px 16px;border-right:1px solid #334155;font-size:15px;font-weight:900;color:#93c5fd;font-family:monospace;text-align:center;'>{call_count}</td>"
+        f"<td style='padding:14px 16px;border-right:1px solid #334155;font-size:14px;font-weight:700;color:#93c5fd;font-family:monospace;text-align:right;'>{total_prompt:,}</td>"
+        f"<td style='padding:14px 16px;border-right:1px solid #334155;font-size:14px;font-weight:700;color:#93c5fd;font-family:monospace;text-align:right;'>{total_completion:,}</td>"
+        f"<td style='padding:14px 16px;border-right:1px solid #334155;font-size:15px;font-weight:900;color:#4ade80;font-family:monospace;text-align:right;'>${total_cost:.4f}</td>"
+        f"<td style='padding:14px 16px;font-size:14px;font-weight:700;color:#4ade80;font-family:monospace;text-align:right;'>100%</td>"
         f"</tr>"
     )
 
@@ -4376,84 +4470,17 @@ _log_llm_cost("Entity Extraction", deployment, response)
         f"<div style='margin-bottom:20px;'>"
         f"<div style='font-size:13px;font-weight:800;color:#1e293b;"
         f"font-family:monospace;text-transform:uppercase;letter-spacing:2px;"
-        f"margin-bottom:14px;'>Per-Task Breakdown</div>"
+        f"margin-bottom:14px;'>Per-Task Breakdown — Session</div>"
         f"<div style='border:1px solid #e2e8f0;border-radius:10px;overflow:hidden;'>"
         f"<table style='width:100%;border-collapse:collapse;'>"
         f"<thead><tr style='background:#1e293b;'>{header_cells}</tr></thead>"
         f"<tbody>{rows_html}</tbody>"
         f"<tfoot>{total_row}</tfoot>"
-        f"</table>"
-        f"</div></div>",
+        f"</table></div></div>",
         unsafe_allow_html=True,
     )
 
     st.markdown("<div style='margin-top:24px;'></div>", unsafe_allow_html=True)
-
-    
-    # ── Call log timeline ──────────────────────────────────────────────────────
-    st.markdown(_section_header("Call Log", f"most recent {min(len(log), 20)} calls"), unsafe_allow_html=True)
-
-    _TASK_COLORS = [
-        "#2563eb", "#7c3aed", "#059669", "#dc2626",
-        "#ca8a04", "#0284c7", "#db2777", "#16a34a",
-    ]
-    task_color_map: dict[str, str] = {}
-    for i, (task_name, _) in enumerate(sorted_tasks):
-        task_color_map[task_name] = _TASK_COLORS[i % len(_TASK_COLORS)]
-
-    for entry in reversed(log[-20:]):
-        e_task  = entry.get("task", "Unknown")
-        e_model = entry.get("model", "?")
-        e_pt    = int(entry.get("prompt_tokens", 0))
-        e_ct    = int(entry.get("completion_tokens", 0))
-        e_cost  = _compute_cost(entry)
-        e_ts    = (entry.get("timestamp", "")[:19] or "").replace("T", " ")
-        e_doc   = entry.get("doc_name", "")
-        e_color = task_color_map.get(e_task, "#64748b")
-
-        cost_badge_c  = "#16a34a" if e_cost < 0.01 else "#ca8a04" if e_cost < 0.05 else "#dc2626"
-        cost_badge_bg = "#f0fdf4" if e_cost < 0.01 else "#fefce8" if e_cost < 0.05 else "#fef2f2"
-
-        st.markdown(
-            f"<div style='background:#ffffff;border:1px solid {_BORDER};"
-            f"border-left:5px solid {e_color};border-radius:8px;"
-            f"padding:14px 18px;margin-bottom:8px;"
-            f"display:flex;align-items:center;gap:14px;flex-wrap:wrap;'>"
-
-            # Task badge
-            f"<span style='font-size:12px;font-weight:800;color:{e_color};"
-            f"font-family:monospace;background:{e_color}12;border:1px solid {e_color}30;"
-            f"border-radius:6px;padding:4px 12px;white-space:nowrap;min-width:130px;"
-            f"text-align:center;'>{e_task}</span>"
-
-            # Model
-            f"<span style='font-size:12px;font-weight:600;color:#334155;"
-            f"font-family:monospace;white-space:nowrap;'>"
-            f"🤖 {e_model}</span>"
-
-            # Tokens
-            f"<span style='font-size:12px;font-weight:600;color:#475569;"
-            f"font-family:monospace;white-space:nowrap;'>"
-            f"↑ <strong>{e_pt:,}</strong> · ↓ <strong>{e_ct:,}</strong> tokens</span>"
-
-            # Doc name
-            + (f"<span style='font-size:11px;color:{_LBL};font-family:monospace;"
-               f"white-space:nowrap;'>📄 {e_doc}</span>" if e_doc else "")
-
-            # Timestamp
-            + (f"<span style='font-size:11px;color:{_LBL};font-family:monospace;"
-               f"white-space:nowrap;'>⏱ {e_ts}</span>" if e_ts else "")
-
-            # Cost badge
-            + f"<span style='margin-left:auto;font-size:14px;font-weight:900;"
-            f"color:{cost_badge_c};background:{cost_badge_bg};"
-            f"border:1px solid {cost_badge_c}40;border-radius:20px;"
-            f"padding:4px 14px;font-family:monospace;white-space:nowrap;'>"
-            f"${e_cost:.4f}</span>"
-
-            f"</div>",
-            unsafe_allow_html=True,
-        )
 
     # ── Pricing reference ─────────────────────────────────────────────────────
     with st.expander("💡 Pricing reference (per 1K tokens) — updated April 2026"):
@@ -4469,7 +4496,6 @@ _log_llm_cost("Entity Extraction", deployment, response)
             ("🤖", "Claude Sonnet 4", "claude-sonnet-4", "#dc2626", "#fef2f2"),
             ("🤖", "Claude Haiku 3",  "claude-3-haiku",  "#dc2626", "#fef2f2"),
         ]
-
         cols_per_row = 2
         rows = [_DISPLAY_MODELS[i:i+cols_per_row] for i in range(0, len(_DISPLAY_MODELS), cols_per_row)]
         for row in rows:
@@ -4478,75 +4504,38 @@ _log_llm_cost("Entity Extraction", deployment, response)
                 prices = _LLM_PRICING.get(model_key, _LLM_PRICING["default"])
                 with col_obj:
                     st.markdown(
-                        f"<div style='"
-                        f"background:{bg};"
-                        f"border-radius:14px;"
-                        f"padding:20px 24px;"
-                        f"margin-bottom:14px;"
-                        f"box-shadow:0 4px 16px {color}22;"
-                        f"border:1px solid {color}30;"
-                        f"'>"
-
-                        # ── Header row: icon + model name ──
+                        f"<div style='background:{bg};border-radius:14px;padding:20px 24px;"
+                        f"margin-bottom:14px;box-shadow:0 4px 16px {color}22;border:1px solid {color}30;'>"
                         f"<div style='display:flex;align-items:center;gap:12px;margin-bottom:16px;'>"
-                        f"<div style='"
-                        f"width:44px;height:44px;border-radius:50%;"
-                        f"background:{color};display:flex;align-items:center;"
-                        f"justify-content:center;font-size:20px;flex-shrink:0;"
-                        f"box-shadow:0 2px 8px {color}40;'>"
-                        f"{icon}</div>"
-                        f"<div>"
-                        f"<div style='font-size:16px;font-weight:800;color:#0f172a;"
+                        f"<div style='width:44px;height:44px;border-radius:50%;background:{color};"
+                        f"display:flex;align-items:center;justify-content:center;font-size:20px;"
+                        f"flex-shrink:0;box-shadow:0 2px 8px {color}40;'>{icon}</div>"
+                        f"<div><div style='font-size:16px;font-weight:800;color:#0f172a;"
                         f"font-family:monospace;line-height:1.2;'>{label}</div>"
                         f"<div style='font-size:10px;color:#64748b;font-family:monospace;"
-                        f"margin-top:2px;'>{model_key}</div>"
-                        f"</div>"
-                        f"</div>"
-
-                        # ── Pricing row ──
+                        f"margin-top:2px;'>{model_key}</div></div></div>"
                         f"<div style='display:grid;grid-template-columns:1fr 1fr;gap:10px;'>"
-
-                        # Input card
-                        f"<div style='"
-                        f"background:#ffffff;"
-                        f"border:1px solid {color}30;"
-                        f"border-top:3px solid #16a34a;"
-                        f"border-radius:10px;"
-                        f"padding:14px 12px;"
-                        f"text-align:center;'>"
-                        f"<div style='font-size:9px;font-weight:800;color:#166534;"
-                        f"font-family:monospace;text-transform:uppercase;"
-                        f"letter-spacing:1.5px;margin-bottom:8px;'>📥 Input</div>"
-                        f"<div style='font-size:22px;font-weight:900;color:#15803d;"
-                        f"font-family:monospace;line-height:1;'>${prices['input']:.5f}</div>"
-                        f"<div style='font-size:9px;color:#4ade80;font-family:monospace;"
-                        f"margin-top:6px;background:#f0fdf4;border-radius:20px;"
-                        f"padding:2px 8px;display:inline-block;'>per 1K tokens</div>"
-                        f"</div>"
-
-                        # Output card
-                        f"<div style='"
-                        f"background:#ffffff;"
-                        f"border:1px solid {color}30;"
-                        f"border-top:3px solid #dc2626;"
-                        f"border-radius:10px;"
-                        f"padding:14px 12px;"
-                        f"text-align:center;'>"
-                        f"<div style='font-size:9px;font-weight:800;color:#991b1b;"
-                        f"font-family:monospace;text-transform:uppercase;"
-                        f"letter-spacing:1.5px;margin-bottom:8px;'>📤 Output</div>"
-                        f"<div style='font-size:22px;font-weight:900;color:#dc2626;"
-                        f"font-family:monospace;line-height:1;'>${prices['output']:.5f}</div>"
-                        f"<div style='font-size:9px;color:#f87171;font-family:monospace;"
-                        f"margin-top:6px;background:#fef2f2;border-radius:20px;"
-                        f"padding:2px 8px;display:inline-block;'>per 1K tokens</div>"
-                        f"</div>"
-
-                        f"</div>"  # end pricing grid
-                        f"</div>", # end card
+                        f"<div style='background:#ffffff;border:1px solid {color}30;"
+                        f"border-top:3px solid #16a34a;border-radius:10px;padding:14px 12px;text-align:center;'>"
+                        f"<div style='font-size:9px;font-weight:800;color:#166534;font-family:monospace;"
+                        f"text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;'>📥 Input</div>"
+                        f"<div style='font-size:22px;font-weight:900;color:#15803d;font-family:monospace;"
+                        f"line-height:1;'>${prices['input']:.5f}</div>"
+                        f"<div style='font-size:9px;color:#4ade80;font-family:monospace;margin-top:6px;"
+                        f"background:#f0fdf4;border-radius:20px;padding:2px 8px;display:inline-block;'>"
+                        f"per 1K tokens</div></div>"
+                        f"<div style='background:#ffffff;border:1px solid {color}30;"
+                        f"border-top:3px solid #dc2626;border-radius:10px;padding:14px 12px;text-align:center;'>"
+                        f"<div style='font-size:9px;font-weight:800;color:#991b1b;font-family:monospace;"
+                        f"text-transform:uppercase;letter-spacing:1.5px;margin-bottom:8px;'>📤 Output</div>"
+                        f"<div style='font-size:22px;font-weight:900;color:#dc2626;font-family:monospace;"
+                        f"line-height:1;'>${prices['output']:.5f}</div>"
+                        f"<div style='font-size:9px;color:#f87171;font-family:monospace;margin-top:6px;"
+                        f"background:#fef2f2;border-radius:20px;padding:2px 8px;display:inline-block;'>"
+                        f"per 1K tokens</div></div>"
+                        f"</div></div>",
                         unsafe_allow_html=True,
                     )
-            
 
     # ── Clear button ──────────────────────────────────────────────────────────
     st.markdown("<div style='margin-top:16px;'></div>", unsafe_allow_html=True)
@@ -4554,7 +4543,7 @@ _log_llm_cost("Entity Extraction", deployment, response)
     with clr_col:
         if st.button("🗑 Clear cost log", key="_clear_cost_log_btn", use_container_width=True):
             st.session_state["_llm_cost_log"] = []
-            st.session_state["_adi_cost_log"] = [] 
+            st.session_state["_adi_cost_log"] = []
             st.toast("Cost log cleared.")
             st.rerun()
 

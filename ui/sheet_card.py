@@ -88,6 +88,10 @@ def render_sheet_card(
                 if (v.get('value', '') if isinstance(v, dict) else str(v)).strip()
             )
             
+    
+   
+
+
 
     # Per-sheet duplicate warning
     _selected_dup = sheet_dup_info.get(selected_sheet)

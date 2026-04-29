@@ -276,7 +276,11 @@ def _llm_call(
                     "prompt_tokens":     usage.prompt_tokens,
                     "completion_tokens": usage.completion_tokens,
                     "timestamp":         datetime.datetime.now().isoformat(),
-                    "doc_name":          st.session_state.get("_file_name", ""),
+                    "doc_name":          (
+                        st.session_state.get("_file_name")
+                        or st.session_state.get("last_uploaded", "").split("_")[0]
+                        or ""
+                    ),
                 })
         except Exception:
             pass  # never let cost logging break the main flow

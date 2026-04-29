@@ -330,6 +330,7 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
     with open(excel_path, "wb") as f:
         f.write(uploaded.read())
     st.session_state.last_uploaded = _upload_fingerprint
+    st.session_state["_file_name"] = uploaded.name
 
     if file_ext == ".pdf":
         from modules.pdf_azure_parser import get_pdf_sheet_names
@@ -372,7 +373,7 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
     # Clear all per-file session keys
     for key in list(st.session_state.keys()):
         if (
-            key.startswith("_rendered_") or key.startswith("_llm_fieldmap_")
+            key.startswith("_rendered_") 
             or key.startswith("_claim_dup_results_") or key.startswith("mod_")
             or key.startswith("edit_") or key.startswith("_fv_")
             or key.startswith("_v_") or key.startswith("err_")
@@ -385,9 +386,23 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
             or key == "_open_journey_dialog"
         ):
             del st.session_state[key]
+            
+    
 
+    
     file_hash = _compute_file_sha256(excel_path)
     file_ext  = os.path.splitext(excel_path)[1].lower()
+
+    # Reset LLM cost tracking ONLY for a genuinely new/different file
+    # Same file re-upload keeps the existing cost log so it stays visible
+    _prev_hash = st.session_state.get("_llm_cost_file_hash", "")
+    if file_hash != _prev_hash:
+        st.session_state["_llm_usage_log"] = []
+        st.session_state["_llm_totals"] = {
+            "prompt_tokens": 0, "output_tokens": 0,
+            "total_tokens": 0, "cost_usd": 0.0, "calls": 0,
+        }
+        st.session_state["_llm_cost_file_hash"] = file_hash
 
     if file_ext == ".txt":
     # .txt files don't have sheets — use file-level hash as the sheet hash

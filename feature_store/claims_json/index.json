@@ -1,32 +1,7 @@
 {
-  "b517575b4ae79315121e0f3a3fdd2b80b6c1c7338353ee44f70af5e89159f4c6": {
-    "path": "feature_store/claims_json\\Loss Detail 2025_20260429_120701.json",
-    "sheet_name": "Loss Detail 2025",
-    "saved_at": "2026-04-29T12:07:01.873344"
-  },
   "f1ccfd99a00c3af56116cc4d3559002ff20dfb084f93ee74dc917c62f1096d1d": {
-    "path": "feature_store/claims_json\\Page 1_20260429_121017.json",
+    "path": "feature_store/claims_json\\Page 1_20260429_170022.json",
     "sheet_name": "Page 1",
-    "saved_at": "2026-04-29T12:10:17.677685"
-  },
-  "b9e7b51ec0e4fec6d237bbaf2a0d7632de15bc77185ceba880a984bd299780a2": {
-    "path": "feature_store/claims_json\\Page 1_20260429_121533.json",
-    "sheet_name": "Page 1",
-    "saved_at": "2026-04-29T12:15:33.705545"
-  },
-  "48b1c7c0abbc566158f6c68039b81c67f579dc0b97848d0905b0427870f8ba0f": {
-    "path": "feature_store/claims_json\\Page 1_20260429_124059.json",
-    "sheet_name": "Page 1",
-    "saved_at": "2026-04-29T12:40:59.525901"
-  },
-  "8be735012f47256d00ea7b70ec4ffc0b6125b542fb1193aaaff110ce190fa52a": {
-    "path": "feature_store/claims_json\\Transcript_20260429_124520.json",
-    "sheet_name": "Transcript",
-    "saved_at": "2026-04-29T12:45:20.573133"
-  },
-  "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b": {
-    "path": "feature_store/claims_json\\Transcript_20260429_124719.json",
-    "sheet_name": "Transcript",
-    "saved_at": "2026-04-29T12:47:19.516077"
+    "saved_at": "2026-04-29T17:00:22.471617"
   }
 }

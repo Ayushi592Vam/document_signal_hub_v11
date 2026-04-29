@@ -939,7 +939,7 @@ def show_claim_journey_dialog(
       _title_summary = _title_keys + (f" +{_title_more} more" if _title_more > 0 else "")
       _pipeline_steps.append(_step_row(
          _D_PUR, "📋", "TITLE ROW EXTRACTED",
-         f"Sheet-level KV fields parsed (no LLM): {_title_summary}",
+         f"Sheet-level KV fields parsed : {_title_summary}",
          _ts_fmt(_ts_dialog_open)
     ))
 
@@ -958,7 +958,7 @@ def show_claim_journey_dialog(
     )
        _pipeline_steps.append(_step_row(
            _D_BLU, "⊞", "MERGED CELLS SCANNED",
-           f"{_n_merged} merged region(s) detected ({_merged_type_str}) — rule-based, no LLM",
+           f"{_n_merged} merged region(s) detected ({_merged_type_str}) — rule-based ",
            _ts_fmt(_ts_dialog_open)
     ))
 
