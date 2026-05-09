@@ -86,7 +86,7 @@ except ImportError as _pdf_panel_err:
 # PDF doc types that use the intelligence panel instead of claims panel
 # FIX: "Loss Run" added — pdf_intelligence now handles all 4 document types
 # ════════════════════════════════════════════════════════════════════════════
-_PDF_INTELLIGENCE_TYPES = {"FNOL", "Legal", "Medical", "Loss Run"}
+_PDF_INTELLIGENCE_TYPES = {"FNOL", "Legal", "Medical", "Loss Run", "Underwriting"}
 
 
 # ════════════════════════════════════════════════════════════════════════════

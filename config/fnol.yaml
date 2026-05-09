@@ -476,34 +476,160 @@ type_specific:
     description: Immediate recommended action for the claims handler
 
 # ── Signal detection taxonomy ─────────────────────────────────────────────────
+# signals:
+#   types:
+#     - severity
+#     - legal_escalation
+#     - fraud_indicator
+#     - coverage_issue
+#   severity_triggers:
+#     highly_severe:
+#       - fatality
+#       - death
+#       - fatal
+#       - catastrophic
+#       - total loss
+#       - explosion
+#       - fire marshal
+#       - secondary explosion
+#     high:
+#       - significant injury
+#       - bodily injury
+#       - hospitalized
+#       - major damage
+#       - business interruption
+#       - large loss
+#     moderate:
+#       - minor injury
+#       - airbag deployed
+#       - police report
+#       - third party
+#     low:
+#       - no injuries
+#       - minor damage
+
+
 signals:
-  types:
-    - severity
-    - legal_escalation
-    - fraud_indicator
-    - coverage_issue
-  severity_triggers:
-    highly_severe:
-      - fatality
-      - death
-      - fatal
-      - catastrophic
-      - total loss
-      - explosion
-      - fire marshal
-      - secondary explosion
-    high:
-      - significant injury
-      - bodily injury
-      - hospitalized
-      - major damage
-      - business interruption
-      - large loss
-    moderate:
-      - minor injury
-      - airbag deployed
-      - police report
-      - third party
-    low:
-      - no injuries
-      - minor damage
+  severity:
+    label: "Injury Severity"
+    icon: "🔴"
+    color: "#dc2626"
+    business_impact: "↑↑ severity, ↑ reserves"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "fatality"
+          - "death"
+          - "deceased"
+          - "fatal"
+          - "total loss"
+          - "permanent disability"
+          - "catastrophic injury"
+        description: "Fatal or catastrophic injury reported"
+      high:
+        keywords:
+          - "hospitalized"
+          - "surgery required"
+          - "ICU"
+          - "permanent impairment"
+          - "severe injury"
+          - "multiple fractures"
+          - "fractures"
+          - "severe pain"
+        description: "Serious injury requiring hospitalization or surgery"
+      moderate:
+        keywords:
+          - "moderate injury"
+          - "emergency room"
+          - "ER visit"
+          - "medical treatment"
+          - "doctor visit"
+        description: "Moderate injury requiring medical attention"
+      low:
+        keywords:
+          - "minor injury"
+          - "first aid"
+          - "no injury"
+          - "property only"
+        description: "Minor or no injury reported"
+
+  legal_escalation:
+    label: "Legal Escalation"
+    icon: "⚖️"
+    color: "#7c3aed"
+    business_impact: "↑↑ severity, ↑ duration"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "criminal charges"
+          - "wrongful death suit"
+          - "class action"
+          - "punitive damages"
+        description: "Criminal or wrongful death level exposure"
+      high:
+        keywords:
+          - "attorney involved"
+          - "attorney retained"
+          - "lawsuit filed"
+          - "litigation initiated"
+          - "demand letter"
+          - "legal representation"
+        description: "Attorney involvement at FNOL stage — high litigation risk"
+      moderate:
+        keywords:
+          - "considering attorney"
+          - "seeking legal advice"
+          - "consulting lawyer"
+        description: "Claimant considering legal representation"
+
+  fraud_indicator:
+    label: "Fraud Indicator"
+    icon: "🚩"
+    color: "#d97706"
+    business_impact: "↑ SIU referral"
+    severity_triggers:
+      high:
+        keywords:
+          - "inconsistent statement"
+          - "conflicting account"
+          - "prior similar claim"
+          - "staged accident"
+          - "suspicious"
+        description: "Strong fraud indicators at FNOL"
+      moderate:
+        keywords:
+          - "unusual circumstances"
+          - "delayed reporting"
+          - "no witnesses"
+          - "prior claims history"
+        description: "Moderate fraud indicators"
+
+  medical_complexity:
+    label: "Medical Complexity"
+    icon: "🏥"
+    color: "#2563eb"
+    business_impact: "↑ medical costs, ↑ duration"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "permanent disability"
+          - "permanent impairment"
+          - "paralysis"
+          - "traumatic brain injury"
+          - "spinal cord"
+        description: "Permanent or catastrophic medical condition"
+      high:
+        keywords:
+          - "surgery"
+          - "surgical procedure"
+          - "hospitalization"
+          - "ICU"
+          - "multiple treatments"
+        description: "Complex medical treatment required"
+      moderate:
+        keywords:
+          - "physical therapy"
+          - "specialist referral"
+          - "ongoing treatment"
+          - "chiropractic"
+        description: "Ongoing medical care needed"

@@ -1,0 +1,312 @@
+doc_type: Underwriting
+role: "expert insurance underwriting analyst specialising in risk assessment and submission evaluation"
+
+sub_types:
+  commercial:
+    keywords: ["commercial", "business", "LLC", "corporation", "inc", "company"]
+    extra_fields: ["Revenue", "Number of Employees", "Years in Operation"]
+  personal_lines:
+    keywords: ["homeowner", "personal", "residential", "dwelling"]
+    extra_fields: ["Home Age", "Construction Type", "Prior Carrier"]
+  specialty:
+    keywords: ["specialty", "excess", "surplus", "E&S"]
+    extra_fields: ["Specialty Coverage Type", "Surplus Lines Carrier"]
+
+entities:
+  - name: "Submission Reference"
+    aliases: ["Submission Ref", "Submission ID"]
+  - name: "Date of Submission"
+    aliases: ["Submission Date"]
+  - name: "Requested Effective Date"
+  - name: "Business Name"
+    aliases: ["Insured Name", "Named Insured"]
+  - name: "Business Address"
+  - name: "NAICS / SIC Code"
+    aliases: ["NAICS Code", "SIC Code"]
+  - name: "Years in Business"
+  - name: "Policy Number"
+  - name: "Policy Period Start"
+  - name: "Policy Period End"
+  - name: "Coverage Requested vs Exposure"
+    aliases: ["Coverage vs Exposure", "Adequacy Ratio", "Coverage Adequacy"]
+  - name: "Coverage Type"
+  - name: "Coverage Requested"
+  - name: "Coverage Limit"
+    aliases: ["Limit of Liability", "Requested Limit"]
+  - name: "Deductible"
+  - name: "Prior Loss Indicator"
+  - name: "Number of Prior Losses"
+  - name: "Total Prior Loss Amount"
+  - name: "Hazard Type"
+    aliases: ["Flood Hazard", "Fire Hazard", "Roof Condition", "Occupancy Hazard"]
+  - name: "Broker Name"
+    aliases: ["Agent Name", "Producer Name"]
+  - name: "Underwriter Name"
+  - name: "Risk Description"
+  - name: "Prior Carrier"
+  - name: "Reason for Markets"
+  - name: "Business Classification"
+  - name: "Geographic Risk Flags"
+  - name: "Inspector Recommendation"
+  - name: "Deficiency Count"
+
+type_specific:
+  - name: "Risk Appetite Score"
+    description: "Overall risk appetite assessment score"
+  - name: "Bind / Decline Recommendation"
+    description: "Underwriter recommendation to bind or decline"
+  - name: "CAT Exposure Flag"
+    description: "Whether catastrophe exposure is present"
+  - name: "Adequacy Ratio"
+    description: "Coverage adequacy ratio assessment"
+  - name: "Estimated Annual Premium"
+    description: "Estimated annual premium for this submission"
+  - name: "Loss Ratio Trend"
+    description: "Historical loss ratio trend assessment"
+  - name: "Referral Required"
+    description: "Whether this submission requires referral"
+  - name: "Pricing Adequacy"
+    description: "Assessment of whether pricing is adequate"
+
+
+signals:
+  risk_severity:
+    label: "Risk Severity"
+    icon: "🔴"
+    color: "#dc2626"
+    business_impact: "↑↑ pricing, ↑ reserves"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "catastrophic exposure"
+          - "total loss"
+          - "critical infrastructure"
+          - "high-hazard occupancy"
+          - "CAT zone"
+          - "catastrophic loss"
+          - "severe CAT"
+          - "maximum possible loss"
+          - "Zone AE"            
+          - "open / reserved"
+          - "reserve"
+          - "reserved"
+        description: "Catastrophic or total loss level risk exposure detected"
+      high:
+        keywords:
+          - "high hazard"
+          - "high-hazard"
+          - "severe"
+          - "Fire—"
+          - "Fire"
+          - "significant damage"
+          - "major loss"
+          - "high risk"
+          - "elevated exposure"
+          - "open loss"          # ← ADD
+          - "reserved"           # ← ADD
+          - "fire loss"          
+          - "electrical arc"     
+          - "theft" 
+          - "theft"                # ← ADD 
+          - "Theft —"              # ← ADD 
+          - "loss history"         # ← ADD — 
+          - "gross loss"           # ← ADD — 
+          - "open"
+          - "substantial risk"
+          - "moderate to severe"
+        description: "High severity risk indicators present in submission"
+      moderate:
+        keywords:
+          - "moderate risk"
+          - "some exposure"
+          - "minor deficiency"
+          - "low hazard"
+          - "standard risk"
+          - "wind damage"        # ← ADD 
+          - "water damage"       # ← ADD 
+          - "sprinkler activation" 
+        description: "Moderate risk indicators identified"
+      low:
+        keywords:
+          - "minimal risk"
+          - "low exposure"
+          - "preferred risk"
+          - "clean history"
+        description: "Low severity risk profile"
+
+  litigation_exposure:
+    label: "Litigation Exposure"
+    icon: "⚖️"
+    color: "#7c3aed"
+    business_impact: "↑↑ exclusions, ↑ premium"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "bad faith allegation"
+          - "class action"
+          - "punitive damages"
+          - "criminal charges"
+          - "regulatory action"
+        description: "Severe litigation or regulatory exposure"
+      high:
+        keywords:
+          - "coverage dispute"
+          - "prior suit"
+          - "lawsuit filed"
+          - "litigation initiated"
+          - "demand letter"
+          - "legal history"
+          - "disputed coverage"
+          - "attorney involved"
+        description: "Active or prior litigation identified"
+      moderate:
+        keywords:
+          - "complaint filed"
+          - "pre-litigation"
+          - "settlement demand"
+          - "counsel retained"
+          - "legal representation"
+        description: "Pre-litigation indicators present"
+
+  recovery_subrogation:
+    label: "Recovery / Subrogation"
+    icon: "♻️"
+    color: "#059669"
+    business_impact: "↓ net severity"
+    severity_triggers:
+      high:
+        keywords:
+          - "third party liable"
+          - "subrogation potential"
+          - "shared negligence"
+          - "vendor responsible"
+          - "subcontractor fault"
+          - "upstream liability"
+          - "third party fault"
+          - "upstream risk"
+          - "shared liability"
+        description: "Strong subrogation or third party recovery opportunity"
+      moderate:
+        keywords:
+          - "possible recovery"
+          - "partial liability"
+          - "contributory negligence"
+          - "downstream loss"
+        description: "Potential partial recovery opportunity"
+
+  risk_appetite:
+    label: "Risk Appetite"
+    icon: "🎯"
+    color: "#d97706"
+    business_impact: "↑ severity, ↑ cycle time"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "non-disclosure"
+          - "material misrepresentation"
+          - "concealed information"
+          - "false statement"
+          - "fraud"
+        description: "Material non-disclosure or misrepresentation detected"
+      high:
+        keywords:
+          - "inconsistent history"
+          - "undisclosed operations"
+          - "non-renewing due to loss"   
+          - "non-renewing"               # ← ADD
+          - "loss activity"              # ← ADD
+          - "expiring carrier" 
+          - "reason for marketing"
+          - "refusal to disclose"
+          - "incomplete submission"
+          - "aggressive demand"
+          - "uncooperative"
+        description: "Significant risk appetite concerns identified"
+      moderate:
+        keywords:
+          - "partial disclosure"
+          - "additional information required"
+          - "clarification needed"
+          - "incomplete data"
+        description: "Moderate risk appetite concerns"
+
+  coverage_adequacy:
+    label: "Coverage Adequacy"
+    icon: "📋"
+    color: "#b45309"
+    business_impact: "↑ exposure gap, ↑ E&O risk"
+    severity_triggers:
+      high:
+        keywords:
+          - "underinsured"
+          - "coverage gap"
+          - "inadequate limits"
+          - "may be marginal"            
+          - "risk of underinsurance" 
+          - "below replacement cost"
+          - "risk of underinsurance"  
+          - "underinsurance"       
+          - "Business Income Adequacy"
+          - "coinsurance penalty"
+          - "coverage requested vs exposure"
+        description: "Significant coverage inadequacy identified"
+      moderate:
+        keywords:
+          - "limits review needed"
+          - "coverage review"
+          - "adequacy concern"
+          - "marginal coverage"
+        description: "Coverage adequacy requires review"
+
+  fraud_indicator:
+    label: "Fraud Indicator"
+    icon: "🚩"
+    color: "#dc2626"
+    business_impact: "↑ SIU referral, ↑ investigation"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "staged loss"
+          - "fabricated"
+          - "false claim"
+          - "misrepresentation confirmed"
+        description: "Direct fraud evidence in submission"
+      high:
+        keywords:
+          - "inconsistent records"
+          - "conflicting information"
+          - "prior fraud history"
+          - "unusual pattern"
+          - "suspicious activity"
+        description: "Strong fraud indicators in submission"
+      moderate:
+        keywords:
+          - "unusual frequency"
+          - "pattern of losses"
+          - "high claim frequency"
+        description: "Moderate fraud indicators"
+
+severity_keywords:
+  highly_severe:
+    - "catastrophic"
+    - "total loss"
+    - "non-disclosure"
+    - "bad faith"
+    - "criminal"
+    - "fraud confirmed"
+  high:
+    - "severe"
+    - "high hazard"
+    - "lawsuit"
+    - "third party liable"
+    - "inconsistent history"
+    - "coverage dispute"
+  moderate:
+    - "moderate"
+    - "deficiency"
+    - "partial liability"
+    - "clarification needed"
+  low:
+    - "minimal"
+    - "preferred"
+    - "clean history"

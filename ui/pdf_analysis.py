@@ -324,8 +324,14 @@ def _synthesize_signals_from_entities(intelligence: dict) -> list[dict]:
             continue
         if keyword.lower() in corpus:
             seen.add(dedup_key)
-            idx     = corpus.find(keyword.lower())
-            snippet = corpus[max(0, idx - 80): idx + 200].strip().replace("\n", " ")
+            idx = corpus.find(keyword.lower())
+
+            # Find clean word boundary to avoid mid-word cuts
+            snippet_start = max(0, idx - 80)
+            while snippet_start > 0 and corpus[snippet_start - 1] not in (' ', '\n', '.'):
+                snippet_start -= 1
+
+            snippet = corpus[snippet_start: idx + 200].strip().replace("\n", " ")
             signals.append({
                 "type":            sig_type,
                 "severity_level":  severity,
@@ -3238,6 +3244,36 @@ def _render_signals_tab(intelligence: dict) -> None:
                     f"📄 &ldquo;{safe_text}&rdquo;</div>"
                 )
 
+                # Add these after existing badge HTML in the signal card:
+
+                trigger_html = ""
+                if sig.get("trigger_matched"):
+                    trigger_html = (
+                        f"<div style='font-size:10px;color:#0369a1;"
+                        f"background:#e0f2fe;border:1px solid #bae6fd;"
+                        f"border-radius:4px;padding:3px 10px;"
+                        f"display:inline-block;margin-top:6px;"
+                        f"font-family:monospace;'>"
+                        f"🎯 Trigger: <strong>{sig['trigger_matched']}</strong></div>"
+                    )
+
+                conf_html = ""
+                sig_conf = float(sig.get("confidence", 0))
+                if sig_conf > 0:
+                    conf_html = (
+                        f"&nbsp;&nbsp;{_conf_badge(sig_conf)}"
+                    )
+
+                unverified_html = ""
+                if sig.get("_unverified"):
+                    unverified_html = (
+                        f"<span style='font-size:9px;color:#dc2626;"
+                        f"background:#fef2f2;border:1px solid #fecaca;"
+                        f"border-radius:10px;padding:1px 7px;"
+                        f"font-family:monospace;margin-left:6px;'>"
+                        f"⚠ unverified</span>"
+                    )
+
             st.markdown(
                 f"<div style='background:{_BG};border:1px solid {_BORDER};"
                 f"border-left:4px solid {tc};border-radius:8px;"
@@ -3259,6 +3295,7 @@ def _render_signals_tab(intelligence: dict) -> None:
                 + "</div>",
                 unsafe_allow_html=True,
             )
+
 
 
 # ─────────────────────────────────────────────────────────────────────────────

@@ -1,0 +1,677 @@
+{
+  "records": {
+    "1": {
+      "Submission Reference": {
+        "value": "MSI-UW-2026-04871",
+        "modified": "MSI-UW-2026-04871",
+        "original": "MSI-UW-2026-04871",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Submission Reference: MSI-UW-2026-04871",
+        "bounding_polygon": [
+          [
+            0.9503,
+            1.7522
+          ],
+          [
+            3.8632,
+            1.7522
+          ],
+          [
+            3.8632,
+            1.9241
+          ],
+          [
+            0.9503,
+            1.9241
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.902,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Date of Submission": {
+        "value": "May 8, 2026",
+        "modified": "May 8, 2026",
+        "original": "May 8, 2026",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Date of Submission: May 8, 2026",
+        "bounding_polygon": [
+          [
+            0.9349,
+            2.1339
+          ],
+          [
+            3.1756,
+            2.1339
+          ],
+          [
+            3.1756,
+            2.3121
+          ],
+          [
+            0.9349,
+            2.3121
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.874,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Requested Effective Date": {
+        "value": "June 1, 2026",
+        "modified": "June 1, 2026",
+        "original": "June 1, 2026",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Requested Effective Date: June 1, 2026",
+        "bounding_polygon": [
+          [
+            0.9455,
+            2.3633
+          ],
+          [
+            3.634,
+            2.3633
+          ],
+          [
+            3.634,
+            2.5304
+          ],
+          [
+            0.9455,
+            2.5304
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.874,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Line of Business": {
+        "value": "Commercial Property - All Risk",
+        "modified": "Commercial Property - All Risk",
+        "original": "Commercial Property - All Risk",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Line of Business: Commercial Property - All Risk",
+        "bounding_polygon": [
+          [
+            0.936,
+            2.5829
+          ],
+          [
+            4.3885,
+            2.5829
+          ],
+          [
+            4.3885,
+            2.7452
+          ],
+          [
+            0.936,
+            2.7452
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.859,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Underwriter": {
+        "value": "James R. Hartley, Senior Underwriter",
+        "modified": "James R. Hartley, Senior Underwriter",
+        "original": "James R. Hartley, Senior Underwriter",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Underwriter: James R. Hartley, Senior Underwriter",
+        "bounding_polygon": [
+          [
+            0.9407,
+            2.8025
+          ],
+          [
+            4.4601,
+            2.8025
+          ],
+          [
+            4.4601,
+            2.9696
+          ],
+          [
+            0.9407,
+            2.9696
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.862,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Broker Contact": {
+        "value": "Sandra L. Mendes | Direct: (312) 554-7820 | s.mendes@meridianbrokers.com",
+        "modified": "Sandra L. Mendes | Direct: (312) 554-7820 | s.mendes@meridianbrokers.com",
+        "original": "Sandra L. Mendes | Direct: (312) 554-7820 | s.mendes@meridianbrokers.com",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Broker Contact: Sandra L. Mendes | Direct: (312) 554-7820 | s.mendes@meridianbrokers.com",
+        "bounding_polygon": [
+          [
+            0.9407,
+            3.0317
+          ],
+          [
+            3.314,
+            3.0317
+          ],
+          [
+            3.314,
+            3.194
+          ],
+          [
+            0.9407,
+            3.194
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.879,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "DBA": {
+        "value": "Greenfield Fabrication & Supply Mailing Address 4800 Industrial Pkwy, Suite 100, Columbus, OH 43228",
+        "modified": "Greenfield Fabrication & Supply Mailing Address 4800 Industrial Pkwy, Suite 100, Columbus, OH 43228",
+        "original": "Greenfield Fabrication & Supply Mailing Address 4800 Industrial Pkwy, Suite 100, Columbus, OH 43228",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "DBA: Greenfield Fabrication & Supply Mailing Address 4800 Industrial Pkwy, Suite 100, Columbus, OH 43228",
+        "bounding_polygon": [
+          [
+            2.0295,
+            4.6492
+          ],
+          [
+            5.263,
+            4.6492
+          ],
+          [
+            5.263,
+            4.7886
+          ],
+          [
+            2.0295,
+            4.7886
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.875,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "FEIN": {
+        "value": "31-4872910 Entity Type Limited Liability Company Year Established 2003 Primary SIC Code 3462 - Iron and Steel Forgings Secondary SIC Code 3490- Misc. Fabricated Metal Products Annual Revenue (2025) $48,200,000 Full-Time Employees 214 Part-Time / Seasonal 32 Business Description Greenfield Manufacturing Holdings, LLC is a mid-size metal fabrication company operating out of three locations in central Ohio. The company specializes in precision-forged components for the automotive and heavy equipment sectors, supplying Tier-1 and Tier-2 vendors. Operations include hot and cold forging lines, CNC machining cells, powder coating, and a just-in-time warehousing facility. The insured has been a client of Meridian Specialty Insurance Brokers since 2011 and has maintained continuous property coverage throughout",
+        "modified": "31-4872910 Entity Type Limited Liability Company Year Established 2003 Primary SIC Code 3462 - Iron and Steel Forgings Secondary SIC Code 3490- Misc. Fabricated Metal Products Annual Revenue (2025) $48,200,000 Full-Time Employees 214 Part-Time / Seasonal 32 Business Description Greenfield Manufacturing Holdings, LLC is a mid-size metal fabrication company operating out of three locations in central Ohio. The company specializes in precision-forged components for the automotive and heavy equipment sectors, supplying Tier-1 and Tier-2 vendors. Operations include hot and cold forging lines, CNC machining cells, powder coating, and a just-in-time warehousing facility. The insured has been a client of Meridian Specialty Insurance Brokers since 2011 and has maintained continuous property coverage throughout",
+        "original": "31-4872910 Entity Type Limited Liability Company Year Established 2003 Primary SIC Code 3462 - Iron and Steel Forgings Secondary SIC Code 3490- Misc. Fabricated Metal Products Annual Revenue (2025) $48,200,000 Full-Time Employees 214 Part-Time / Seasonal 32 Business Description Greenfield Manufacturing Holdings, LLC is a mid-size metal fabrication company operating out of three locations in central Ohio. The company specializes in precision-forged components for the automotive and heavy equipment sectors, supplying Tier-1 and Tier-2 vendors. Operations include hot and cold forging lines, CNC machining cells, powder coating, and a just-in-time warehousing facility. The insured has been a client of Meridian Specialty Insurance Brokers since 2011 and has maintained continuous property coverage throughout",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "FEIN: 31-4872910 Entity Type Limited Liability Company Year Established 2003 Primary SIC Code 3462 - Iron and Steel Forgings Secondary SIC Code 3490- Misc. Fabricated Metal Products Annual Revenue (2025) $48,200,000 Full-Time Employees 214 Part-Time / Seasonal 32 Business Description Greenfield Manufacturing Holdings, LLC is a mid-size metal fabrication company operating out of three locations in central Ohio. The company specializes in precision-forged components for the automotive and heavy equipment sectors, supplying Tier-1 and Tier-2 vendors. Operations include hot and cold forging lines, CNC machining cells, powder coating, and a just-in-time warehousing facility. The insured has been a client of Meridian Specialty Insurance Brokers since 2011 and has maintained continuous property coverage throughout",
+        "bounding_polygon": [
+          [
+            2.0295,
+            5.2708
+          ],
+          [
+            4.1831,
+            5.2708
+          ],
+          [
+            4.1831,
+            5.3854
+          ],
+          [
+            2.0295,
+            5.3854
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.923,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Direct": {
+        "value": "(312) 554-7820 | s.mendes@meridianbrokers.com",
+        "modified": "(312) 554-7820 | s.mendes@meridianbrokers.com",
+        "original": "(312) 554-7820 | s.mendes@meridianbrokers.com",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Direct: (312) 554-7820 | s.mendes@meridianbrokers.com",
+        "bounding_polygon": [
+          [
+            3.4382,
+            3.0269
+          ],
+          [
+            7.1581,
+            3.0269
+          ],
+          [
+            7.1581,
+            3.1988
+          ],
+          [
+            3.4382,
+            3.1988
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.368,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Named Insured": {
+        "value": "Greenfield Manufacturing Holdings, LLC",
+        "modified": "Greenfield Manufacturing Holdings, LLC",
+        "original": "Greenfield Manufacturing Holdings, LLC",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Named Insured: Greenfield Manufacturing Holdings, LLC",
+        "bounding_polygon": [
+          [
+            2.0247,
+            4.3494
+          ],
+          [
+            5.7208,
+            4.3494
+          ],
+          [
+            5.7208,
+            4.4831
+          ],
+          [
+            2.0247,
+            4.4831
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.874,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Mailing Address": {
+        "value": "4800 Industrial Pkwy, Suite 100, Columbus, OH 43228",
+        "modified": "4800 Industrial Pkwy, Suite 100, Columbus, OH 43228",
+        "original": "4800 Industrial Pkwy, Suite 100, Columbus, OH 43228",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Mailing Address: 4800 Industrial Pkwy, Suite 100, Columbus, OH 43228",
+        "bounding_polygon": [
+          [
+            2.0247,
+            4.9605
+          ],
+          [
+            6.4753,
+            4.9605
+          ],
+          [
+            6.4753,
+            5.099
+          ],
+          [
+            2.0247,
+            5.099
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.835,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Entity Type": {
+        "value": "Limited Liability Company",
+        "modified": "Limited Liability Company",
+        "original": "Limited Liability Company",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Entity Type: Limited Liability Company",
+        "bounding_polygon": [
+          [
+            2.0286,
+            5.5732
+          ],
+          [
+            4.9675,
+            5.5732
+          ],
+          [
+            4.9675,
+            5.7196
+          ],
+          [
+            2.0286,
+            5.7196
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.881,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Year Established": {
+        "value": "2003",
+        "modified": "2003",
+        "original": "2003",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Year Established: 2003",
+        "bounding_polygon": [
+          [
+            2.0295,
+            5.8819
+          ],
+          [
+            3.8537,
+            5.8819
+          ],
+          [
+            3.8537,
+            6.0013
+          ],
+          [
+            2.0295,
+            6.0013
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.903,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Primary SIC Code": {
+        "value": "3462 - Iron and Steel Forgings",
+        "modified": "3462 - Iron and Steel Forgings",
+        "original": "3462 - Iron and Steel Forgings",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Primary SIC Code: 3462 - Iron and Steel Forgings",
+        "bounding_polygon": [
+          [
+            2.0284,
+            6.191
+          ],
+          [
+            5.2486,
+            6.191
+          ],
+          [
+            5.2486,
+            6.33
+          ],
+          [
+            2.0284,
+            6.33
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.854,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Secondary SIC Code": {
+        "value": "3490- Misc. Fabricated Metal Products",
+        "modified": "3490- Misc. Fabricated Metal Products",
+        "original": "3490- Misc. Fabricated Metal Products",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Secondary SIC Code: 3490- Misc. Fabricated Metal Products",
+        "bounding_polygon": [
+          [
+            2.0295,
+            6.4978
+          ],
+          [
+            5.7351,
+            6.4978
+          ],
+          [
+            5.7351,
+            6.6267
+          ],
+          [
+            2.0295,
+            6.6267
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.86,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Annual Revenue (2025)": {
+        "value": "$48,200,000",
+        "modified": "$48,200,000",
+        "original": "$48,200,000",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Annual Revenue (2025): $48,200,000",
+        "bounding_polygon": [
+          [
+            2.0247,
+            6.808
+          ],
+          [
+            4.2834,
+            6.808
+          ],
+          [
+            4.2834,
+            6.9373
+          ],
+          [
+            2.0247,
+            6.9373
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.886,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Full-Time Employees": {
+        "value": "214",
+        "modified": "214",
+        "original": "214",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Full-Time Employees: 214",
+        "bounding_polygon": [
+          [
+            2.0289,
+            7.113
+          ],
+          [
+            3.7486,
+            7.113
+          ],
+          [
+            3.7486,
+            7.2432
+          ],
+          [
+            2.0289,
+            7.2432
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.902,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Part-Time / Seasonal": {
+        "value": "32",
+        "modified": "32",
+        "original": "32",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Part-Time / Seasonal: 32",
+        "bounding_polygon": [
+          [
+            2.0247,
+            7.4193
+          ],
+          [
+            3.7056,
+            7.4193
+          ],
+          [
+            3.7056,
+            7.553
+          ],
+          [
+            2.0247,
+            7.553
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.886,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      }
+    }
+  },
+  "sheet_type": "PDF",
+  "total_rows": 1,
+  "total_cols": 18,
+  "sheet_name": "Page 1",
+  "col_rename_log": {}
+}

@@ -397,45 +397,132 @@ type_specific:
       Whether an independent medical evaluation is recommended.
 
 # ── Signal detection taxonomy ─────────────────────────────────────────────────
+# signals:
+#   types:
+#     - severity
+#     - medical_complexity
+#     - fraud_indicator
+#     - coverage_issue
+#   severity_triggers:
+#     highly_severe:
+#       - fatal
+#       - death
+#       - cardiac arrest
+#       - brain injury
+#       - spinal cord
+#       - paraplegia
+#       - quadriplegia
+#       - amputation
+#       - coma
+#       - icu
+#       - intensive care
+#       - critical condition
+#     high:
+#       - surgery
+#       - surgical
+#       - fracture
+#       - hospitalized
+#       - admitted
+#       - permanent disability
+#       - nerve damage
+#       - herniated
+#       - torn
+#     moderate:
+#       - physical therapy
+#       - conservative treatment
+#       - sprain
+#       - strain
+#       - contusion
+#       - laceration
+#     low:
+#       - routine
+#       - follow-up
+#       - preventive
+#       - minor
+
+
 signals:
-  types:
-    - severity
-    - medical_complexity
-    - fraud_indicator
-    - coverage_issue
-  severity_triggers:
-    highly_severe:
-      - fatal
-      - death
-      - cardiac arrest
-      - brain injury
-      - spinal cord
-      - paraplegia
-      - quadriplegia
-      - amputation
-      - coma
-      - icu
-      - intensive care
-      - critical condition
-    high:
-      - surgery
-      - surgical
-      - fracture
-      - hospitalized
-      - admitted
-      - permanent disability
-      - nerve damage
-      - herniated
-      - torn
-    moderate:
-      - physical therapy
-      - conservative treatment
-      - sprain
-      - strain
-      - contusion
-      - laceration
-    low:
-      - routine
-      - follow-up
-      - preventive
-      - minor
+  medical_complexity:
+    label: "Medical Complexity"
+    icon: "🏥"
+    color: "#2563eb"
+    business_impact: "↑ medical costs, ↑ claim duration"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "permanent disability"
+          - "permanent impairment"
+          - "paralysis"
+          - "traumatic brain injury"
+          - "spinal cord injury"
+          - "amputation"
+        description: "Permanent or catastrophic medical condition"
+      high:
+        keywords:
+          - "surgery"
+          - "surgical procedure"
+          - "hospitalization"
+          - "ICU"
+          - "chronic condition"
+          - "multiple procedures"
+          - "specialist referral"
+        description: "Complex medical treatment requiring surgery or hospitalization"
+      moderate:
+        keywords:
+          - "physical therapy"
+          - "ongoing treatment"
+          - "follow-up required"
+          - "medication prescribed"
+          - "chiropractic"
+        description: "Ongoing medical care and treatment"
+
+  fraud_indicator:
+    label: "Fraud Indicator"
+    icon: "🚩"
+    color: "#d97706"
+    business_impact: "↑ SIU referral"
+    severity_triggers:
+      high:
+        keywords:
+          - "inconsistent diagnosis"
+          - "conflicting medical records"
+          - "duplicate billing"
+          - "upcoding"
+          - "unbundling"
+          - "unnecessary procedures"
+        description: "Medical billing fraud indicators"
+      moderate:
+        keywords:
+          - "unusual treatment pattern"
+          - "excessive treatment"
+          - "high frequency visits"
+        description: "Potential medical fraud indicators"
+
+  severity:
+    label: "Injury Severity"
+    icon: "🔴"
+    color: "#dc2626"
+    business_impact: "↑ reserves, ↑ settlement value"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "permanent disability"
+          - "catastrophic"
+          - "fatal"
+          - "death"
+          - "terminal"
+        description: "Fatal or permanently disabling condition"
+      high:
+        keywords:
+          - "surgery required"
+          - "hospitalized"
+          - "severe injury"
+          - "multiple fractures"
+          - "ICU admission"
+        description: "Serious injury requiring surgery or hospitalization"
+      moderate:
+        keywords:
+          - "moderate injury"
+          - "restricted activity"
+          - "partial impairment"
+        description: "Moderate injury with functional limitations"

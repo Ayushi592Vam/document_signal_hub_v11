@@ -48,6 +48,7 @@ try:
         get_signal_types,
         get_role,
         get_severity_keywords,
+        build_signal_detection_prompt,
     )
     _CONFIG_AVAILABLE = True
 except ImportError:
@@ -74,6 +75,16 @@ except ImportError:
 
     def get_severity_keywords(doc_type: str) -> dict:  # type: ignore[misc]
         return {}
+
+    def build_signal_detection_prompt(doc_type: str) -> str:
+        return (
+          f"Signal types to detect: "
+          f"{get_signal_types(doc_type)}\n"
+          "For each signal return: type, severity_level "
+          "(Highly Severe|High|Moderate|Low), "
+          "description, supporting_text (verbatim quote), "
+          "trigger_matched, confidence."
+    )    
 
 
 # ── Fallback field lists (used only when doc_config import fails) ─────────────
@@ -111,12 +122,23 @@ _FALLBACK_ENTITIES = {
         "Adjustment Amount, Patient Responsibility, Insurance ID, Group Number, "
         "Authorization Number, Attending Physician, Referring Physician"
     ),
+     "Underwriting": (
+        "Submission Reference, Date of Submission, Requested Effective Date, "
+        "Business Name, Business Address, NAICS / SIC Code, Years in Business, "
+        "Policy Number, Coverage Type, Coverage Limit, Deductible, "
+        "Prior Loss Indicator, Number of Prior Losses, Total Prior Loss Amount, "
+        "Broker Name, Underwriter Name, Risk Description, Prior Carrier"
+    ),
 }
 _FALLBACK_TYPE_SPECIFIC = {
     "FNOL":     "Severity, Litigation Risk, Fraud Indicator, Coverage Concern, Estimated Loss Amount, Recommended Next Step",
     "Legal":    "Severity, Litigation Stage, Coverage Issue, Estimated Exposure, Reservation of Rights, Recommended Defense Strategy",
     "Loss Run": "Portfolio Severity, Frequency Trend, Litigation Rate, Large Loss Count, Large Loss Threshold, Recommended Reserve Action",
     "Medical":  "Severity, Medical Complexity, Treatment Duration, Disability Type, MMI Status, Causation Opinion, Fraud Indicator, Recommended IME",
+    "Underwriting": 
+        "Risk Appetite Score, Bind / Decline Recommendation, CAT Exposure Flag, "
+        "Adequacy Ratio, Estimated Annual Premium, Loss Ratio Trend, "
+        "Referral Required, Pricing Adequacy",
 }
 
 
@@ -385,11 +407,14 @@ You are a senior insurance document analyst. Classify the document into exactly 
   - Legal       : Court documents, complaints, dockets, attorney correspondence, settlements
   - Loss Run    : Tabular claims history, TPA loss run, portfolio reports
   - Medical     : Medical records, bills, EOBs, treatment notes, IMEs
+  - Underwriting : Insurance submissions, risk assessments, underwriting applications,
+                   broker submissions, coverage requests, risk surveys
+
 
 Respond ONLY with valid JSON. No preamble.
 
 {
-  "classification": "<FNOL|Legal|Loss Run|Medical>",
+  "classification": "<FNOL|Legal|Loss Run|Medical|Underwriting>",
   "confidence": <0.0–1.0>,
   "reasoning": "<2-3 sentences>",
   "ambiguities": "<mixed signals or empty string>"
@@ -532,12 +557,17 @@ ANTI-HALLUCINATION RULES — MANDATORY:
 def _entities_system(doc_type: str, subtype: str | None = None) -> str:
     role          = get_role(doc_type)
     entity_fields = build_entity_field_list(doc_type, subtype)
-    signal_types  = get_signal_types(doc_type)
+    # signal_types  = get_signal_types(doc_type)
+
+    
 
     subtype_note = (
         f"\nThis document appears to be a {subtype.upper()} sub-type of {doc_type}. "
         f"Pay special attention to the additional fields listed above.\n"
     ) if subtype else ""
+
+
+    
 
     checkbox_rule = textwrap.dedent("""
 CHECKBOX FIELDS — CRITICAL RULE:
@@ -585,6 +615,22 @@ CHECKBOX FIELDS — CRITICAL RULE:
 
     )
 
+    # Updated schema — entities only, no signals section
+    entities_only_schema = """
+Return ONLY valid JSON — no markdown, no preamble.
+
+{
+  "entities": {
+    "<SEMANTIC_LABEL>": {
+      "azure_di_key": "<exact Azure DI field name or null>",
+      "value":        "<exact value from document>",
+      "source_text":  "<short verbatim snippet, optional>",
+      "confidence":   <0.0–1.0>
+    }
+  }
+}
+"""
+
     return textwrap.dedent(f"""
 You are a {role}.
 {subtype_note}
@@ -598,10 +644,47 @@ Extract ONLY these entity fields (skip any not present in the document):
 
 {empty_rule}
 
-Signal types to detect: {signal_types}
+DO NOT extract signals — signals are handled separately.
 
-{_ENTITIES_SCHEMA}
+{entities_only_schema}
 """).strip()
+
+
+def _signals_system(doc_type: str) -> str:
+    """
+    Dedicated system prompt for the signals-only LLM call (Call B).
+    Uses build_signal_detection_prompt() from doc_config for
+    YAML-driven, keyword-specific signal detection guidance.
+    All signal extraction uses gpt-4o-mini (use_enhanced=False).
+    """
+    role          = get_role(doc_type)
+    signal_prompt = build_signal_detection_prompt(doc_type)
+
+    return textwrap.dedent(f"""
+You are a {role} specialising in risk signal detection.
+
+{signal_prompt}
+
+{_GROUNDING_RULES}
+
+Return ONLY valid JSON — no markdown, no preamble, no explanation.
+
+{{
+  "signals": [
+    {{
+      "type":            "<signal_type exactly as listed above>",
+      "severity_level":  "<Highly Severe|High|Moderate|Low>",
+      "description":     "<plain-English explanation of why this signal fired>",
+      "supporting_text": "<VERBATIM quote from document, max 120 chars>",
+      "trigger_matched": "<exact keyword or phrase from the Triggers list>",
+      "confidence":      <0.0-1.0>
+    }}
+  ]
+}}
+
+If no signals are detected, return: {{"signals": []}}
+""").strip()
+
 
 def _summary_system(doc_type: str) -> str:
     """Build the summary+judge system prompt from config."""
@@ -777,9 +860,10 @@ def analyse_document(
     azure_di_fields: dict[str, dict] | None = None,
 ) -> dict:
     """
-    Two-call analysis (standard model):
-      Call A: entities + signals
-      Call B: summary + type_specific + judge
+    Three-call analysis — all on gpt-4o-mini:
+      Call A — entities only        (max_tokens=2000)
+      Call B — signals only         (max_tokens=1500) ← dedicated
+      Call C — summary + judge      (max_tokens=1200)
 
     Sub-type is auto-detected from the document text via doc_config.
     """
@@ -807,50 +891,130 @@ def analyse_document(
             + "\n}"
         )
 
-    # ── Call A: entities + signals ────────────────────────────────────────────
+    # # ── Call A: entities + signals ────────────────────────────────────────────
+    # user_a = (
+    #     f"Document type: {doc_type}"
+    #     + (f" / Sub-type: {subtype}" if subtype else "")
+    #     + f"\nExtract entities and detect signals."
+    #     + adi_listing
+    #     + f"\n\n--- DOCUMENT TEXT ---\n{text_a}"
+    # )
+    # result_a = _llm_call(
+    #     system_prompt=_entities_system(doc_type, subtype),
+    #     user_prompt=user_a,
+    #     max_tokens=2500,
+    #     label="entities_signals",
+    #     use_enhanced=False,
+    # )
+
+    # # Retry with reduced input if Call A failed
+    # if result_a is None:
+    #     _debug_store("entities_signals_retry_triggered", "Call A returned None")
+    #     result_a = _llm_call(
+    #         system_prompt=_entities_system(doc_type, subtype),
+    #         user_prompt=user_a[:int(len(user_a) * 0.6)],
+    #         max_tokens=2500,
+    #         label="entities_signals_retry",
+    #         use_enhanced=False,
+    #     )
+
+    # # ── Call B: summary + type_specific + judge ───────────────────────────────
+    # user_b = (
+    #     f"Document type: {doc_type}"
+    #     + (f" / Sub-type: {subtype}" if subtype else "")
+    #     + f"\nGenerate a summary and assessment."
+    #     + adi_listing
+    #     + f"\n\n--- DOCUMENT TEXT ---\n{text_b}"
+    # )
+    # result_b = _llm_call(
+    #     system_prompt=_summary_system(doc_type),
+    #     user_prompt=user_b,
+    #     max_tokens=1200,
+    #     label="summary_judge",
+    #     use_enhanced=False,
+    # )
+
+    # # ── Merge ──────────────────────────────────────────────────────────────────
+    # entities      = {}
+    # signals       = []
+    # summary       = ""
+    # type_specific = {}
+    # judge         = {}
+
+    # if result_a:
+    #     entities = result_a.get("entities") or {}
+    #     signals  = result_a.get("signals")  or []
+    #     # ── LAYER 4: Verify extracted values exist in source text ─────────
+    #     entities = _verify_entities_against_text(entities, full_text)
+    #     for _, ed in entities.items():
+    #         if isinstance(ed, dict):
+    #             ed.setdefault("azure_di_key", None)
+
+    # if result_b:
+    #     summary       = result_b.get("summary")       or ""
+    #     type_specific = result_b.get("type_specific") or {}
+    #     judge         = result_b.get("judge")         or {}
+
+
+    # ── CALL A — Entities only (gpt-4o-mini) ─────────────────────────────────
     user_a = (
         f"Document type: {doc_type}"
         + (f" / Sub-type: {subtype}" if subtype else "")
-        + f"\nExtract entities and detect signals."
+        + "\nExtract entities only — do NOT extract signals in this call."
         + adi_listing
         + f"\n\n--- DOCUMENT TEXT ---\n{text_a}"
     )
     result_a = _llm_call(
         system_prompt=_entities_system(doc_type, subtype),
         user_prompt=user_a,
-        max_tokens=2500,
-        label="entities_signals",
-        use_enhanced=False,
+        max_tokens=2000,
+        label="entities",
+        use_enhanced=False,   # gpt-4o-mini
     )
 
     # Retry with reduced input if Call A failed
     if result_a is None:
-        _debug_store("entities_signals_retry_triggered", "Call A returned None")
+        _debug_store("entities_retry_triggered", "Call A returned None")
         result_a = _llm_call(
             system_prompt=_entities_system(doc_type, subtype),
             user_prompt=user_a[:int(len(user_a) * 0.6)],
-            max_tokens=2500,
-            label="entities_signals_retry",
+            max_tokens=2000,
+            label="entities_retry",
             use_enhanced=False,
         )
 
-    # ── Call B: summary + type_specific + judge ───────────────────────────────
-    user_b = (
+    # ── CALL B — Signals only (gpt-4o-mini, YAML-driven) ─────────────────────
+    user_b_signals = (
         f"Document type: {doc_type}"
         + (f" / Sub-type: {subtype}" if subtype else "")
-        + f"\nGenerate a summary and assessment."
-        + adi_listing
-        + f"\n\n--- DOCUMENT TEXT ---\n{text_b}"
+        + "\nDetect risk signals ONLY. Do not extract entity fields."
+        + f"\n\n--- DOCUMENT TEXT ---\n{full_text[:6000]}"
     )
     result_b = _llm_call(
-        system_prompt=_summary_system(doc_type),
-        user_prompt=user_b,
-        max_tokens=1200,
-        label="summary_judge",
+        system_prompt=_signals_system(doc_type),
+        user_prompt=user_b_signals,
+        max_tokens=2500,   # ← enough for 6-7 detailed signals
+        label="signals",
         use_enhanced=False,
     )
 
-    # ── Merge ──────────────────────────────────────────────────────────────────
+    # ── CALL C — Summary + type_specific + judge (gpt-4o-mini) ───────────────
+    user_c = (
+        f"Document type: {doc_type}"
+        + (f" / Sub-type: {subtype}" if subtype else "")
+        + "\nGenerate a summary and assessment."
+        + adi_listing
+        + f"\n\n--- DOCUMENT TEXT ---\n{text_a}"
+    )
+    result_c = _llm_call(
+        system_prompt=_summary_system(doc_type),
+        user_prompt=user_c,
+        max_tokens=1200,
+        label="summary_judge",
+        use_enhanced=False,   # gpt-4o-mini
+    )
+
+    # ── Merge all three results ───────────────────────────────────────────────
     entities      = {}
     signals       = []
     summary       = ""
@@ -859,17 +1023,20 @@ def analyse_document(
 
     if result_a:
         entities = result_a.get("entities") or {}
-        signals  = result_a.get("signals")  or []
-        # ── LAYER 4: Verify extracted values exist in source text ─────────
         entities = _verify_entities_against_text(entities, full_text)
         for _, ed in entities.items():
             if isinstance(ed, dict):
                 ed.setdefault("azure_di_key", None)
 
     if result_b:
-        summary       = result_b.get("summary")       or ""
-        type_specific = result_b.get("type_specific") or {}
-        judge         = result_b.get("judge")         or {}
+        signals = result_b.get("signals") or []
+        signals = _validate_signals_against_text(signals, full_text)
+
+    if result_c:
+        summary       = result_c.get("summary")       or ""
+        type_specific = result_c.get("type_specific") or {}
+        judge         = result_c.get("judge")         or {}
+
 
     if not entities and not signals and not summary:
         return _empty_analysis(doc_type)
@@ -907,6 +1074,70 @@ def _empty_analysis(doc_type: str) -> dict:
 # ─────────────────────────────────────────────────────────────────────────────
 # LAYER 4 — POST-EXTRACTION HALLUCINATION VERIFIER
 # ─────────────────────────────────────────────────────────────────────────────
+def _validate_signals_against_text(signals: list, full_text: str) -> list:
+    if not full_text or not signals:
+        return signals
+
+    text_lower = full_text.lower()
+    validated  = []
+
+    for sig in signals:
+        supporting = (sig.get("supporting_text") or "").strip()
+        trigger    = (sig.get("trigger_matched")  or "").strip()
+
+        grounded = False
+
+        # Check 1: supporting_text verbatim in document
+        if supporting and len(supporting) >= 6:  # was 8
+            if supporting.lower() in text_lower:
+                grounded = True
+            else:
+                sup_toks = {
+                    t for t in supporting.lower().split()
+                    if len(t) >= 3  # was 4
+                }
+                doc_toks = set(text_lower.split())
+                if sup_toks:
+                    overlap = len(sup_toks & doc_toks) / len(sup_toks)
+                    if overlap >= 0.40:  # was 0.60
+                        grounded = True
+
+        # Check 2: trigger keyword in document
+        # ALSO check with punctuation stripped
+        trigger_clean = re.sub(r"[—\-–]", " ", trigger).strip()
+        trigger_found = bool(
+            trigger and (
+                trigger.lower() in text_lower
+                or trigger_clean.lower() in text_lower
+            )
+        )
+        if trigger_found and not grounded:
+            grounded = True
+
+        # NEW Check 3: any significant word from trigger in document
+        if not grounded and trigger:
+            trigger_words = {
+                w for w in trigger.lower().split()
+                if len(w) >= 5
+            }
+            if trigger_words and trigger_words & set(text_lower.split()):
+                grounded = True
+
+        if not grounded:
+            sig = dict(sig)
+            sig["confidence"]  = min(float(sig.get("confidence", 0.5)), 0.40)
+            sig["_unverified"] = True
+
+        if not trigger_found and trigger:
+            sig = dict(sig)
+            sig["_trigger_not_found"] = True
+
+        validated.append(sig)
+
+    return validated
+
+
+
 def _verify_entities_against_text(entities: dict, full_text: str) -> dict:
     """
     Post-extraction guardrail: remove any entity whose value cannot be 
@@ -925,6 +1156,9 @@ def _verify_entities_against_text(entities: dict, full_text: str) -> dict:
         "severity", "litigation risk", "fraud indicator",
         "recommended next step", "coverage concern",
         "estimated loss amount", "medical complexity",
+        "risk appetite score", "bind / decline recommendation",
+        "cat exposure flag", "adequacy ratio", "estimated annual premium",
+        "loss ratio trend", "referral required", "pricing adequacy",
     }
 
     for fname, fdata in entities.items():
@@ -938,9 +1172,13 @@ def _verify_entities_against_text(entities: dict, full_text: str) -> dict:
             continue
 
         value = (fdata.get("value") or "").strip()
-        if not value or len(value) < 3:
+
+        # LOOSENED: allow short values through (was < 3, now < 2)
+        if not value or len(value) < 2:
             verified[fname] = fdata
             continue
+
+        
 
         # Check 1: exact substring match
         if value.lower() in text_lower:
@@ -950,17 +1188,17 @@ def _verify_entities_against_text(entities: dict, full_text: str) -> dict:
         # Check 2: significant token overlap (for multi-word values)
         val_tokens = set(re.sub(r"[^\w\s]", " ", value.lower()).split())
         doc_tokens = set(re.sub(r"[^\w\s]", " ", text_lower).split())
-        sig_tokens = {t for t in val_tokens if len(t) >= 4}
+        sig_tokens = {t for t in val_tokens if len(t) >= 3}
 
         if sig_tokens:
             overlap = len(sig_tokens & doc_tokens) / len(sig_tokens)
-            if overlap >= 0.70:
+            if overlap >= 0.50:
                 verified[fname] = fdata
                 continue
 
         # Check 3: digit sequence match (for IDs, phone numbers, amounts)
         val_digits = re.sub(r"\D", "", value)
-        if len(val_digits) >= 6 and val_digits in re.sub(r"\D", "", full_text):
+        if len(val_digits) >= 4 and val_digits in re.sub(r"\D", "", full_text):
             verified[fname] = fdata
             continue
 

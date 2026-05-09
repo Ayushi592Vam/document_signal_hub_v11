@@ -57,6 +57,7 @@ _CONFIG_FILES: dict[str, str] = {
     "Legal":    "legal",
     "Medical":  "medical",
     "Loss Run": "loss_run",
+    "Underwriting": "underwriting", 
 }
 
 
@@ -191,13 +192,22 @@ def build_type_specific_field_list(doc_type: str) -> str:
 # SIGNAL CONFIG HELPERS
 # ─────────────────────────────────────────────────────────────────────────────
 
+# def get_signal_types(doc_type: str) -> str:
+#     """Return comma-separated signal types for the LLM prompt."""
+#     cfg = load_config(doc_type)
+#     types: list[str] = cfg.get("signals", {}).get("types", [])
+#     if not types:
+#         return "severity, legal_escalation, fraud_indicator, coverage_issue"
+#     return ", ".join(types)
+
 def get_signal_types(doc_type: str) -> str:
-    """Return comma-separated signal types for the LLM prompt."""
-    cfg = load_config(doc_type)
-    types: list[str] = cfg.get("signals", {}).get("types", [])
-    if not types:
-        return "severity, legal_escalation, fraud_indicator, coverage_issue"
-    return ", ".join(types)
+    config = load_config(doc_type)
+    signals = config.get("signals", {})
+    if signals:
+        return ", ".join(signals.keys())
+    # existing fallback
+    return config.get("signal_types", 
+        "severity, legal_escalation, fraud_indicator, coverage_issue")
 
 
 def get_severity_keywords(doc_type: str) -> dict[str, list[str]]:
@@ -279,3 +289,93 @@ def config_summary() -> dict[str, Any]:
             "has_role": bool(cfg.get("role")),
         }
     return summary
+
+
+
+def build_signal_detection_prompt(doc_type: str) -> str:
+    """
+    Build a rich, structured signal detection prompt from YAML config.
+    Used by pdf_intelligence.py _signals_system() for dedicated signal Call B.
+    """
+    config = load_config(doc_type)
+    signals_cfg = config.get("signals", {})
+
+    if not signals_cfg:
+        # Graceful fallback to old behavior
+        return (
+            f"Signal types to detect: {get_signal_types(doc_type)}\n"
+            "For each signal: type, severity_level (Highly Severe|High|Moderate|Low), "
+            "description, supporting_text (verbatim quote)."
+        )
+
+    lines = []
+    lines.append("=" * 60)
+    lines.append("SIGNAL DETECTION RULES — READ CAREFULLY BEFORE EXTRACTING")
+    lines.append("=" * 60)
+    lines.append("")
+    lines.append(
+        "Your task is to detect risk signals from the document text. "
+        "Each signal must be grounded in explicit document language."
+    )
+    lines.append("")
+
+    for sig_type, sig_data in signals_cfg.items():
+        label  = sig_data.get("label", sig_type)
+        impact = sig_data.get("business_impact", "")
+        icon   = sig_data.get("icon", "⚠️")
+
+        lines.append(f"{'─' * 50}")
+        lines.append(f"{icon}  SIGNAL: {sig_type}")
+        lines.append(f"    Label:           {label}")
+        lines.append(f"    Business Impact: {impact}")
+        lines.append(f"    Severity Levels:")
+
+        for severity, sev_data in sig_data.get(
+            "severity_triggers", {}
+        ).items():
+            level_label = severity.replace("_", " ").title()
+            keywords    = sev_data.get("keywords", [])
+            desc        = sev_data.get("description", "")
+            kw_str      = ", ".join(f'"{k}"' for k in keywords)
+
+            lines.append(f"")
+            lines.append(f"      [{level_label}]")
+            lines.append(f"        Triggers  : {kw_str}")
+            lines.append(f"        Meaning   : {desc}")
+
+        lines.append("")
+
+    lines.append("=" * 60)
+    lines.append("MANDATORY RULES:")
+    lines.append("=" * 60)
+    lines.append(
+        "1. VERBATIM GROUNDING: supporting_text must be an EXACT quote "
+        "from the document (max 120 chars). Never paraphrase."
+    )
+    lines.append(
+        "2. TRIGGER MATCH: trigger_matched must be the exact keyword or "
+        "phrase from the Triggers list above that fired this signal."
+    )
+    lines.append(
+        "3. NO INFERENCE: Only fire a signal if the trigger keyword or "
+        "a clear equivalent appears explicitly in the document text."
+    )
+    lines.append(
+        "4. SEVERITY HONESTY: Use the severity level whose triggers best "
+        "match. If unsure between two levels, use the lower one."
+    )
+    lines.append(
+        "5. CONFIDENCE: 0.90+ if trigger keyword is verbatim, "
+        "0.70-0.89 if equivalent phrase, below 0.70 if inferred."
+    )
+    lines.append(
+        "6. NO ABSENCE SIGNALS: Do NOT fire a signal because something "
+        "is missing. Only fire when explicit evidence is present."
+    )
+    lines.append(
+        "7. MULTIPLE SIGNALS OK: Different signal types can fire from "
+        "the same document section."
+    )
+    lines.append("")
+
+    return "\n".join(lines)    

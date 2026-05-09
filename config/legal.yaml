@@ -384,43 +384,153 @@ type_specific:
       High-level recommended defense or claims handling approach.
 
 # ── Signal detection taxonomy ─────────────────────────────────────────────────
+# signals:
+#   types:
+#     - severity
+#     - legal_escalation
+#     - fraud_indicator
+#     - coverage_issue
+#   severity_triggers:
+#     highly_severe:
+#       - wrongful death
+#       - fatal
+#       - death
+#       - fatality
+#       - punitive damages
+#       - class action
+#       - multi-party
+#       - $1,000,000
+#       - $2,000,000
+#       - $3,000,000
+#       - $4,000,000
+#       - $5,000,000
+#       - million
+#     high:
+#       - permanent disability
+#       - catastrophic injury
+#       - malpractice
+#       - negligence
+#       - jury trial demanded
+#       - significant damages
+#       - $500,000
+#       - $250,000
+#     moderate:
+#       - breach of contract
+#       - property damage
+#       - minor injury
+#       - $75,000
+#       - $100,000
+#     low:
+#       - declaratory judgment
+#       - administrative claim
+#       - small claims
+
+
 signals:
-  types:
-    - severity
-    - legal_escalation
-    - fraud_indicator
-    - coverage_issue
-  severity_triggers:
-    highly_severe:
-      - wrongful death
-      - fatal
-      - death
-      - fatality
-      - punitive damages
-      - class action
-      - multi-party
-      - $1,000,000
-      - $2,000,000
-      - $3,000,000
-      - $4,000,000
-      - $5,000,000
-      - million
-    high:
-      - permanent disability
-      - catastrophic injury
-      - malpractice
-      - negligence
-      - jury trial demanded
-      - significant damages
-      - $500,000
-      - $250,000
-    moderate:
-      - breach of contract
-      - property damage
-      - minor injury
-      - $75,000
-      - $100,000
-    low:
-      - declaratory judgment
-      - administrative claim
-      - small claims
+  legal_escalation:
+    label: "Legal Escalation"
+    icon: "⚖️"
+    color: "#7c3aed"
+    business_impact: "↑↑ severity, ↑ duration"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "criminal charges"
+          - "class action"
+          - "punitive damages"
+          - "wrongful death"
+          - "bad faith"
+          - "fraud allegation"
+        description: "Criminal or class-action level legal exposure"
+      high:
+        keywords:
+          - "lawsuit filed"
+          - "litigation initiated"
+          - "demand letter"
+          - "attorney involvement"
+          - "complaint filed"
+          - "negligence alleged"
+          - "damages sought"
+          - "liability"
+        description: "Active litigation or pre-litigation demand"
+      moderate:
+        keywords:
+          - "attorney retained"
+          - "settlement demand"
+          - "deposition"
+          - "mediation"
+          - "arbitration"
+        description: "Legal proceedings underway"
+
+  coverage_issue:
+    label: "Coverage Issue"
+    icon: "📋"
+    color: "#b45309"
+    business_impact: "↑ legal exposure, ↑ cycle time"
+    severity_triggers:
+      high:
+        keywords:
+          - "reservation of rights"
+          - "coverage denied"
+          - "coverage denial"
+          - "policy exclusion"
+          - "coverage dispute"
+          - "bad faith"
+        description: "Active coverage dispute or denial"
+      moderate:
+        keywords:
+          - "exclusion referenced"
+          - "coverage question"
+          - "policy review"
+          - "coverage concern"
+        description: "Potential coverage concern identified"
+
+  fraud_indicator:
+    label: "Fraud Indicator"
+    icon: "🚩"
+    color: "#d97706"
+    business_impact: "↑ SIU referral, ↑ investigation"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "fraud confirmed"
+          - "misrepresentation"
+          - "false claim"
+          - "fabricated evidence"
+        description: "Confirmed fraud or misrepresentation"
+      high:
+        keywords:
+          - "inconsistent statement"
+          - "conflicting evidence"
+          - "suspicious pattern"
+          - "undisclosed"
+        description: "Strong fraud indicators in legal filing"
+
+  severity:
+    label: "Claim Severity"
+    icon: "🔴"
+    color: "#dc2626"
+    business_impact: "↑↑ reserves, ↑ settlement"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "wrongful death"
+          - "fatality"
+          - "catastrophic"
+          - "permanent disability"
+          - "punitive"
+        description: "Catastrophic or fatal injury claim"
+      high:
+        keywords:
+          - "serious injury"
+          - "significant damages"
+          - "large verdict"
+          - "substantial loss"
+          - "major surgery"
+        description: "High value or serious injury claim"
+      moderate:
+        keywords:
+          - "moderate damages"
+          - "ongoing treatment"
+          - "partial disability"
+        description: "Moderate severity claim"

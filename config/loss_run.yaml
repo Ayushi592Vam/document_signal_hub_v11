@@ -284,35 +284,108 @@ type_specific:
       Recommendation on reserve adequacy — increase, release, or maintain.
 
 # ── Signal detection taxonomy ─────────────────────────────────────────────────
+# signals:
+#   types:
+#     - severity
+#     - legal_escalation
+#     - fraud_indicator
+#     - coverage_issue
+#   severity_triggers:
+#     highly_severe:
+#       - catastrophic
+#       - fatality
+#       - fatal
+#       - death
+#       - large loss
+#       - reserve strengthening
+#       - adverse development
+#     high:
+#       - increasing trend
+#       - deteriorating
+#       - worsening
+#       - high frequency
+#       - above benchmark
+#       - above average
+#     moderate:
+#       - open reserves
+#       - litigation
+#       - litigated
+#       - volatile
+#     low:
+#       - improving
+#       - stable
+#       - below average
+#       - favorable
+
+
+
 signals:
-  types:
-    - severity
-    - legal_escalation
-    - fraud_indicator
-    - coverage_issue
-  severity_triggers:
-    highly_severe:
-      - catastrophic
-      - fatality
-      - fatal
-      - death
-      - large loss
-      - reserve strengthening
-      - adverse development
-    high:
-      - increasing trend
-      - deteriorating
-      - worsening
-      - high frequency
-      - above benchmark
-      - above average
-    moderate:
-      - open reserves
-      - litigation
-      - litigated
-      - volatile
-    low:
-      - improving
-      - stable
-      - below average
-      - favorable
+  severity:
+    label: "Portfolio Severity"
+    icon: "🔴"
+    color: "#dc2626"
+    business_impact: "↑↑ pricing, ↑ reserves"
+    severity_triggers:
+      highly_severe:
+        keywords:
+          - "catastrophic loss"
+          - "large loss"
+          - "total loss"
+          - "maximum reserve"
+          - "excess layer triggered"
+        description: "Catastrophic or large loss events in portfolio"
+      high:
+        keywords:
+          - "open claims"
+          - "high severity"
+          - "significant reserve"
+          - "adverse development"
+          - "reserve increase"
+        description: "High severity open claims or adverse development"
+      moderate:
+        keywords:
+          - "moderate severity"
+          - "average reserve"
+          - "standard development"
+        description: "Moderate severity claim patterns"
+
+  fraud_indicator:
+    label: "Fraud Indicator"
+    icon: "🚩"
+    color: "#d97706"
+    business_impact: "↑ SIU referral, ↑ audit"
+    severity_triggers:
+      high:
+        keywords:
+          - "high frequency"
+          - "unusual pattern"
+          - "spike in claims"
+          - "abnormal loss ratio"
+          - "concentrated losses"
+        description: "Claim frequency pattern suggesting systemic issue or fraud"
+      moderate:
+        keywords:
+          - "above average frequency"
+          - "multiple small claims"
+          - "repeat claimants"
+        description: "Elevated claim frequency requiring review"
+
+  coverage_issue:
+    label: "Coverage Issue"
+    icon: "📋"
+    color: "#b45309"
+    business_impact: "↑ coverage gap risk"
+    severity_triggers:
+      high:
+        keywords:
+          - "large reserve"
+          - "contested claim"
+          - "coverage dispute"
+          - "reservation of rights"
+        description: "Coverage disputes or large contested reserves"
+      moderate:
+        keywords:
+          - "coverage review"
+          - "reserve adequacy"
+          - "reinsurance trigger"
+        description: "Coverage or reserve adequacy concerns"
