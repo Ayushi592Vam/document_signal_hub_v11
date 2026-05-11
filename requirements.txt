@@ -1,13 +1,9 @@
-streamlit>=1.35.0
-openpyxl>=3.1.2
-Pillow>=10.0.0
-python-dotenv>=1.0.0
-azure-core
-azure-ai-formrecognizer
-python-docx
-docx2txt
-pymupdf
+streamlit
+pandas
+numpy
 openai
-pyyaml
-spacy>=3.7.0
-en-core-web-sm @ https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.7.1/en_core_web_sm-3.7.1-py3-none-any.whl
+python-docx
+PyPDF2
+spacy
+openpyxl
+requests

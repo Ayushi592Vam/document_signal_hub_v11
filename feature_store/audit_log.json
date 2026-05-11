@@ -4647,5 +4647,27 @@
     "total_rows": 0,
     "total_cols": 0,
     "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-11T17:20:32.482840",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-11T17:21:33.480760",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
   }
 ]

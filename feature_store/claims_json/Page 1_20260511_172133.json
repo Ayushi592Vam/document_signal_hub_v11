@@ -1,0 +1,381 @@
+{
+  "records": {
+    "Torts": {
+      "Date": {
+        "value": "Sept. 25th, 2025",
+        "modified": "Sept. 25th, 2025",
+        "original": "Sept. 25th, 2025",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Date: Sept. 25th, 2025",
+        "bounding_polygon": [
+          [
+            6.7106,
+            0.3198
+          ],
+          [
+            7.7614,
+            0.3198
+          ],
+          [
+            7.7614,
+            0.6779
+          ],
+          [
+            6.7106,
+            0.6779
+          ]
+        ],
+        "page_width": 8.2639,
+        "page_height": 11.6944,
+        "confidence": 0.921,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "CASE NUMBER": {
+        "value": "62CV-24-48",
+        "modified": "62CV-24-48",
+        "original": "62CV-24-48",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "CASE NUMBER: 62CV-24-48",
+        "bounding_polygon": [
+          [
+            0.7808364664446406,
+            1.4900911708949582
+          ],
+          [
+            2.834758755282875,
+            1.4900911708949582
+          ],
+          [
+            2.834758755282875,
+            1.6623109584056284
+          ],
+          [
+            0.7808364664446406,
+            1.6623109584056284
+          ]
+        ],
+        "page_width": 8.2639,
+        "page_height": 11.6944,
+        "confidence": 0.95,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Docket prepared for": {
+        "value": "Attorney Faizan",
+        "modified": "Attorney Faizan",
+        "original": "Attorney Faizan",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Docket prepared for: Attorney Faizan",
+        "bounding_polygon": [
+          [
+            0.7808364664446406,
+            2.9184777287499073
+          ],
+          [
+            2.024354477595481,
+            2.9184777287499073
+          ],
+          [
+            2.024354477595481,
+            3.275695643336643
+          ],
+          [
+            0.7808364664446406,
+            3.275695643336643
+          ]
+        ],
+        "page_width": 8.2639,
+        "page_height": 11.6944,
+        "confidence": 0.95,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "LAST REFRESHED": {
+        "value": "March 1st, 2024",
+        "modified": "March 1st, 2024",
+        "original": "March 1st, 2024",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "LAST REFRESHED: March 1st, 2024",
+        "bounding_polygon": [
+          [
+            0.6246691731557125,
+            4.471922939128378
+          ],
+          [
+            1.8336916252815822,
+            4.471922939128378
+          ],
+          [
+            1.8336916252815822,
+            4.894895388293776
+          ],
+          [
+            0.6246691731557125,
+            4.894895388293776
+          ]
+        ],
+        "page_width": 8.2639,
+        "page_height": 11.6944,
+        "confidence": 0.95,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "JUDGE": {
+        "value": "1ST CIRCUIT DIVISION 3",
+        "modified": "1ST CIRCUIT DIVISION 3",
+        "original": "1ST CIRCUIT DIVISION 3",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "JUDGE: 1ST CIRCUIT DIVISION 3",
+        "bounding_polygon": [
+          [
+            4.137,
+            4.4717
+          ],
+          [
+            5.6395,
+            4.4717
+          ],
+          [
+            5.6395,
+            4.893
+          ],
+          [
+            4.137,
+            4.893
+          ]
+        ],
+        "page_width": 8.2639,
+        "page_height": 11.6944,
+        "confidence": 0.907,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "CATEGORY": {
+        "value": "AUTOMOBILE TORT",
+        "modified": "AUTOMOBILE TORT",
+        "original": "AUTOMOBILE TORT",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "CATEGORY: AUTOMOBILE TORT",
+        "bounding_polygon": [
+          [
+            0.6091,
+            5.5478
+          ],
+          [
+            1.8223,
+            5.5478
+          ],
+          [
+            1.8223,
+            5.9843
+          ],
+          [
+            0.6091,
+            5.9843
+          ]
+        ],
+        "page_width": 8.2639,
+        "page_height": 11.6944,
+        "confidence": 0.936,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "FILING DATE": {
+        "value": "Feb. 29th, 2024",
+        "modified": "Feb. 29th, 2024",
+        "original": "Feb. 29th, 2024",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "FILING DATE: Feb. 29th, 2024",
+        "bounding_polygon": [
+          [
+            4.158981405024168,
+            5.5568691569203725
+          ],
+          [
+            5.136408612358029,
+            5.5568691569203725
+          ],
+          [
+            5.136408612358029,
+            5.97984118223213
+          ],
+          [
+            4.158981405024168,
+            5.97984118223213
+          ]
+        ],
+        "page_width": 8.2639,
+        "page_height": 11.6944,
+        "confidence": 0.95,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "MATTER TYPE": {
+        "value": "Torts Automobile trellis.law/case/5123/62cv-24-48/trexis-corp-v-k-stogner-d-norris-et-all",
+        "modified": "Torts Automobile trellis.law/case/5123/62cv-24-48/trexis-corp-v-k-stogner-d-norris-et-all",
+        "original": "Torts Automobile trellis.law/case/5123/62cv-24-48/trexis-corp-v-k-stogner-d-norris-et-all",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "MATTER TYPE: Torts Automobile trellis.law/case/5123/62cv-24-48/trexis-corp-v-k-stogner-d-norris-et-all",
+        "bounding_polygon": [
+          [
+            4.1472,
+            6.6289
+          ],
+          [
+            5.1066,
+            6.6289
+          ],
+          [
+            5.1066,
+            7.0552
+          ],
+          [
+            4.1472,
+            7.0552
+          ]
+        ],
+        "page_width": 8.2639,
+        "page_height": 11.6944,
+        "confidence": 0.939,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Docket": {
+        "value": "Attorney Faizan\nMarch 1st, 2024",
+        "modified": "Attorney Faizan\nMarch 1st, 2024",
+        "original": "Attorney Faizan\nMarch 1st, 2024",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Docket: Attorney Faizan\nMarch 1st, 2024",
+        "bounding_polygon": [
+          [
+            0.6142,
+            2.9185
+          ],
+          [
+            1.736,
+            2.9185
+          ],
+          [
+            1.736,
+            4.8879
+          ],
+          [
+            0.6142,
+            4.8879
+          ]
+        ],
+        "page_width": 8.2639,
+        "page_height": 11.6944,
+        "confidence": 0.881,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "PRACTICE AREA": {
+        "value": "Torts",
+        "modified": "Torts",
+        "original": "Torts",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "PRACTICE AREA: Torts",
+        "bounding_polygon": [
+          [
+            0.6131,
+            6.6263
+          ],
+          [
+            1.7015,
+            6.6263
+          ],
+          [
+            1.7015,
+            7.0451
+          ],
+          [
+            0.6131,
+            7.0451
+          ]
+        ],
+        "page_width": 8.2639,
+        "page_height": 11.6944,
+        "confidence": 0.939,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      }
+    }
+  },
+  "sheet_type": "PDF",
+  "total_rows": 1,
+  "total_cols": 10,
+  "sheet_name": "Page 1",
+  "col_rename_log": {}
+}
