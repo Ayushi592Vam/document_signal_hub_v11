@@ -46,51 +46,7 @@ import streamlit as st
 
 import re as _re_kw  # ← add this at the TOP of pdf_analysis.py with other imports
 
-def _synthesize_signals_from_entities(intelligence: dict) -> list[dict]:
-    doc_type  = intelligence.get("doc_type", "")
-    full_text = (intelligence.get("full_text", "") or "").lower()
-    entities  = intelligence.get("analysis", {}).get("entities", {})
 
-    entity_blob = " ".join(
-        str(v.get("value", "")) if isinstance(v, dict) else str(v)
-        for v in entities.values()
-    ).lower()
-    corpus = full_text + " " + entity_blob
-
-    keyword_rules = list(_SIGNAL_KEYWORDS.get(doc_type, [])) + _SIGNAL_KEYWORDS_GENERIC
-    seen: set[str] = set()
-    signals: list[dict] = []
-
-    for sig_type, severity, keyword, description in keyword_rules:
-        dedup_key = f"{sig_type}:{keyword}"
-        if dedup_key in seen:
-            continue
-
-        _match = _re_kw.search(r'\b' + _re_kw.escape(keyword.lower()) + r'\b', corpus)
-        if not _match:
-            continue
-
-        seen.add(dedup_key)
-        idx = _match.start()  # ← use match position directly
-
-        # Find clean word boundary to avoid mid-word cuts
-        snippet_start = max(0, idx - 80)
-        while snippet_start > 0 and corpus[snippet_start - 1] not in (' ', '\n', '.'):
-            snippet_start -= 1
-
-        snippet = corpus[snippet_start: idx + 200].strip().replace("\n", " ")
-        signals.append({
-            "type":            sig_type,
-            "severity_level":  severity,
-            "description":     description,
-            "supporting_text": snippet,
-            "trigger_matched": keyword,
-            "confidence":      _get_keyword_signal_confidence(keyword, severity),
-            "_synthesized":    True,
-            "_source":         "keyword",
-        })
-
-    return signals
 
 # Fields to KEEP per doc type from ADI backfill (anything not in this list is dropped)
 _DOC_TYPE_ADI_ALLOWLIST: dict[str, set[str]] = {
@@ -1152,14 +1108,27 @@ def _is_value_semantically_valid(field_name: str, value: str) -> bool:
         if _re_dur.match(r'^(19|20)\d{2}$', v.strip()):
             return False
 
+    
     # ── Rule 6: Circuit/Division fields — reject if value contains bare numbers ──
     _STRUCTURAL_FIELDS = {"circuit", "division", "docket"}
     if any(sf in fname for sf in _STRUCTURAL_FIELDS):
-        # Reject values that are just a number or start with a number alone
         if _re.match(r'^\d+$', v.strip()):
             return False
-        # Reject if it's just one word that's a number suffix like "3" or "0"
         if len(words) <= 2 and all(_re.match(r'^\d+$', w) for w in words):
+            return False
+        # ADD THESE:
+        # Reject if value contains trailing bare number (e.g. "1ST 3", "3 0")
+        if _re.search(r'\s+\d+(\s+\d+)*\s*$', v.strip()):
+            return False
+        # Reject if value is longer than 3 words for circuit/division
+        # (these should be short — "1st Circuit", "Northern Division")
+        if len(words) > 4:
+            return False
+        # Reject if value contains "CIRCUIT" inside a division field or vice versa
+        # (means it's a multi-field dump)
+        if "circuit" in fname and "circuit" in v.lower() and len(words) > 2:
+            return False
+        if "division" in fname and "circuit" in v.lower():
             return False
 
     # ── Rule 7: Reject values that look like multi-field dumps ────────────
@@ -3217,6 +3186,9 @@ def _render_entities_tab(
         confidence  = _lookup_confidence(field_name, field_info)
         conf_pct    = int(confidence * 100)
         
+        # PATCH: skip fields with very low confidence that aren't user-added
+        if conf_pct > 0 and conf_pct < 20 and not is_user:
+            continue
 
         # PATCH: reject mis-extractions where value is prose and confidence is very low
         
