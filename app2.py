@@ -476,11 +476,20 @@ render_file_card(
     sheet_dup_info, st.session_state.sheet_names,
 )
 
+# with col_sheet_dropdown:
+#     st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+#     selected_sheet = st.selectbox(
+#         "Sheet", st.session_state.sheet_names, index=0, label_visibility="collapsed"
+#     )
+
 with col_sheet_dropdown:
-    st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
-    selected_sheet = st.selectbox(
-        "Sheet", st.session_state.sheet_names, index=0, label_visibility="collapsed"
-    )
+    if file_ext not in (".pdf", ".txt"):
+        st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
+        selected_sheet = st.selectbox(
+            "Sheet", st.session_state.sheet_names, index=0, label_visibility="collapsed"
+        )
+    else:
+        selected_sheet = st.session_state.sheet_names[0]
 
 st.markdown("<hr>", unsafe_allow_html=True)
 
@@ -856,15 +865,27 @@ if not _use_intel_panel:
 
 
 # ── Sheet card ────────────────────────────────────────────────────────────────
-render_sheet_card(
-    selected_sheet, sheet_type, sh_hash, len(data),
-    total_rows, total_cols, len(merged_meta), totals_data,
-    len(title_fields), _from_cache, sheet_dup_info,
-    title_kvs=title_fields,
-)
-if _llm_map_ran:
-    from ui.sheet_card import render_llm_map_banner
-    render_llm_map_banner(_llm_map_result, _llm_map_count)
+# render_sheet_card(
+#     selected_sheet, sheet_type, sh_hash, len(data),
+#     total_rows, total_cols, len(merged_meta), totals_data,
+#     len(title_fields), _from_cache, sheet_dup_info,
+#     title_kvs=title_fields,
+# )
+# if _llm_map_ran:
+#     from ui.sheet_card import render_llm_map_banner
+#     render_llm_map_banner(_llm_map_result, _llm_map_count)
+
+# ── Sheet card ────────────────────────────────────────────────────────────────
+if file_ext not in (".pdf", ".txt"):
+    render_sheet_card(
+        selected_sheet, sheet_type, sh_hash, len(data),
+        total_rows, total_cols, len(merged_meta), totals_data,
+        len(title_fields), _from_cache, sheet_dup_info,
+        title_kvs=title_fields,
+    )
+    if _llm_map_ran:
+        from ui.sheet_card import render_llm_map_banner
+        render_llm_map_banner(_llm_map_result, _llm_map_count)
 
 
 # ════════════════════════════════════════════════════════════════════════════

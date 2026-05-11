@@ -141,6 +141,14 @@ def _try_split_inline(line: str) -> tuple[str, str] | None:
     right = right.strip()
     if not left or len(left) > 45 or not right or len(left.split()) > 6:
         return None
+    # PATCH: reject if the left side contains "Commentary", "Note", "Comment",
+    # "Description", "Narrative" — these are prose labels not field names
+    import re as _re_inline
+    if _re_inline.search(
+        r'\b(commentary|comment|note|notes|narrative|description|remarks|summary|detail)\b',
+        left, _re_inline.IGNORECASE
+    ):
+        return None
     return (left, right)
 
 

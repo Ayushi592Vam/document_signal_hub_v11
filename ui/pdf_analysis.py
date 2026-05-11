@@ -44,6 +44,94 @@ import re
 
 import streamlit as st
 
+import re as _re_kw  # ← add this at the TOP of pdf_analysis.py with other imports
+
+def _synthesize_signals_from_entities(intelligence: dict) -> list[dict]:
+    doc_type  = intelligence.get("doc_type", "")
+    full_text = (intelligence.get("full_text", "") or "").lower()
+    entities  = intelligence.get("analysis", {}).get("entities", {})
+
+    entity_blob = " ".join(
+        str(v.get("value", "")) if isinstance(v, dict) else str(v)
+        for v in entities.values()
+    ).lower()
+    corpus = full_text + " " + entity_blob
+
+    keyword_rules = list(_SIGNAL_KEYWORDS.get(doc_type, [])) + _SIGNAL_KEYWORDS_GENERIC
+    seen: set[str] = set()
+    signals: list[dict] = []
+
+    for sig_type, severity, keyword, description in keyword_rules:
+        dedup_key = f"{sig_type}:{keyword}"
+        if dedup_key in seen:
+            continue
+
+        _match = _re_kw.search(r'\b' + _re_kw.escape(keyword.lower()) + r'\b', corpus)
+        if not _match:
+            continue
+
+        seen.add(dedup_key)
+        idx = _match.start()  # ← use match position directly
+
+        # Find clean word boundary to avoid mid-word cuts
+        snippet_start = max(0, idx - 80)
+        while snippet_start > 0 and corpus[snippet_start - 1] not in (' ', '\n', '.'):
+            snippet_start -= 1
+
+        snippet = corpus[snippet_start: idx + 200].strip().replace("\n", " ")
+        signals.append({
+            "type":            sig_type,
+            "severity_level":  severity,
+            "description":     description,
+            "supporting_text": snippet,
+            "trigger_matched": keyword,
+            "confidence":      _get_keyword_signal_confidence(keyword, severity),
+            "_synthesized":    True,
+            "_source":         "keyword",
+        })
+
+    return signals
+
+# Fields to KEEP per doc type from ADI backfill (anything not in this list is dropped)
+_DOC_TYPE_ADI_ALLOWLIST: dict[str, set[str]] = {
+    "Underwriting": {
+        "submission reference", "submission date", "requested effective date",
+        "business name", "business address", "naics", "sic", "years in business",
+        "policy number", "coverage type", "coverage limit", "deductible",
+        "prior loss", "number of prior losses", "total prior loss",
+        "broker name", "underwriter name", "risk description", "prior carrier",
+        "total insured value", "building value", "contents value",
+        "business income", "gross revenue", "number of employees",
+        "construction type", "year built", "square footage", "occupancy",
+    },
+    "FNOL": {
+        "claim number", "policy number", "policyholder name", "date of loss",
+        "time of loss", "location of loss", "cause of loss", "description of loss",
+        "estimated damage", "adjuster", "witness", "police report",
+        "injuries", "injury description", "medical facility",
+    },
+    "Legal": {
+        "case number", "filing date", "last refreshed", "filing location",
+        "filing court", "judge", "category", "practice area", "matter type",
+        "status", "line of business", "docket", "circuit", "division",
+        "cause of action", "plaintiff", "plaintiff attorney", "plaintiff attorney firm",
+        "defendant", "defendant attorney", "defendant attorney firm",
+        "insurance carrier", "policy number", "coverage type",
+        "incident date", "incident location", "damages sought",
+    },
+    "Medical": {
+        "patient name", "date of birth", "patient id", "provider name",
+        "provider npi", "date of service", "date of injury",
+        "primary diagnosis", "icd code", "procedure codes", "treatment",
+        "total charges", "amount paid", "amount denied", "authorization number",
+    },
+    "Loss Run": {
+        "report date", "policy number", "policy period", "named insured",
+        "carrier", "tpa", "line of business", "total claims", "open claims",
+        "closed claims", "total incurred", "total paid", "total reserve",
+        "largest claim", "average claim", "loss ratio",
+    },
+}
 
 # ─────────────────────────────────────────────────────────────────────────────
 # DOC-CONFIG IMPORT  — graceful degradation if not yet installed
@@ -74,12 +162,20 @@ _DOC_TYPE_META_FALLBACK: dict[str, dict] = {
     "Medical":  {"icon": "🏥", "color": "#2563eb", "bg": "rgba(37,99,235,0.06)"},
 }
 
+# _SIGNAL_META_FALLBACK: dict[str, dict] = {
+#     "severity":           {"icon": "🔴", "label": "Severity",           "color": "#dc2626"},
+#     "legal_escalation":   {"icon": "⚖️",  "label": "Legal Escalation",   "color": "#7c3aed"},
+#     "fraud_indicator":    {"icon": "🚩", "label": "Fraud Indicator",    "color": "#d97706"},
+#     "medical_complexity": {"icon": "🏥", "label": "Medical Complexity", "color": "#2563eb"},
+#     "coverage_issue":     {"icon": "📋", "label": "Coverage Issue",     "color": "#b45309"},
+# }
 _SIGNAL_META_FALLBACK: dict[str, dict] = {
-    "severity":           {"icon": "🔴", "label": "Severity",           "color": "#dc2626"},
-    "legal_escalation":   {"icon": "⚖️",  "label": "Legal Escalation",   "color": "#7c3aed"},
-    "fraud_indicator":    {"icon": "🚩", "label": "Fraud Indicator",    "color": "#d97706"},
-    "medical_complexity": {"icon": "🏥", "label": "Medical Complexity", "color": "#2563eb"},
-    "coverage_issue":     {"icon": "📋", "label": "Coverage Issue",     "color": "#b45309"},
+    "severity":           {"icon": "🩸", "label": "Injury / Loss Severity", "color": "#dc2626"},
+    "legal_escalation":   {"icon": "⚖️", "label": "Litigation Risk",        "color": "#7c3aed"},
+    "fraud_indicator":    {"icon": "🚩", "label": "Fraud Red Flags",         "color": "#d97706"},
+    "medical_complexity": {"icon": "🏥", "label": "Medical Complexity",      "color": "#2563eb"},
+    "coverage_adequacy":  {"icon": "📋", "label": "Coverage Gap",            "color": "#b45309"},
+    "recovery_subrogation":{"icon":"🔄", "label": "Recovery / Subrogation",  "color": "#059669"},
 }
 
 _TAXONOMY = {
@@ -253,54 +349,229 @@ div[data-testid="stToast"] button:hover {
 
 _SIGNAL_KEYWORDS: dict[str, list[tuple[str, str, str, str]]] = {
     "Legal": [
-        ("legal_escalation", "High",          "litigation",   "Document references active litigation or legal proceedings."),
-        ("legal_escalation", "High",          "lawsuit",      "Lawsuit referenced in document."),
-        ("legal_escalation", "Highly Severe", "criminal",     "Criminal charges or proceedings referenced."),
-        ("legal_escalation", "High",          "court",        "Court involvement indicated in document."),
-        ("legal_escalation", "Moderate",      "attorney",     "Attorney or legal representation mentioned."),
-        ("legal_escalation", "Moderate",      "complaint",    "Formal complaint has been filed."),
-        ("legal_escalation", "High",          "damages",      "Claim for damages identified."),
-        ("legal_escalation", "High",          "negligence",   "Allegation of negligence present."),
-        ("legal_escalation", "Highly Severe", "fraud",        "Fraud allegation detected."),
-        ("legal_escalation", "Moderate",      "settlement",   "Settlement discussion referenced."),
-        ("legal_escalation", "High",          "liability",    "Liability language detected in document."),
-        ("legal_escalation", "Moderate",      "deposition",   "Deposition activity referenced."),
-        ("coverage_issue",   "Moderate",      "exclusion",    "Policy exclusion referenced."),
-        ("coverage_issue",   "High",          "denied",       "Coverage denial language detected."),
-        ("coverage_issue",   "High",          "reservation",  "Reservation of rights language detected."),
+        # Litigation Risk
+        ("legal_escalation", "High",          "litigation",        "Active litigation referenced"),
+        ("legal_escalation", "High",          "lawsuit",           "Lawsuit filed or referenced"),
+        ("legal_escalation", "High",          "attorney",          "Attorney involvement noted"),
+        ("legal_escalation", "High",          "counsel",           "Legal counsel referenced"),
+        ("legal_escalation", "High",          "plaintiff",         "Plaintiff party identified"),
+        ("legal_escalation", "High",          "defendant",         "Defendant party identified"),
+        ("legal_escalation", "High",          "complaint",         "Formal complaint filed"),
+        ("legal_escalation", "High",          "damages",           "Damages claim identified"),
+        ("legal_escalation", "High",          "negligence",        "Negligence alleged"),
+        ("legal_escalation", "High",          "liability",         "Liability language detected"),
+        ("legal_escalation", "High",          "demand letter",     "Demand letter issued"),
+        ("legal_escalation", "Highly Severe", "criminal",          "Criminal reference detected"),
+        ("legal_escalation", "Highly Severe", "wrongful death",    "Wrongful death claim"),
+        ("legal_escalation", "Highly Severe", "punitive",          "Punitive damages sought"),
+        ("legal_escalation", "Highly Severe", "bad faith",         "Bad faith allegation"),
+        ("legal_escalation", "Highly Severe", "class action",      "Class action litigation"),
+        ("legal_escalation", "Moderate",      "settlement",        "Settlement discussed"),
+        ("legal_escalation", "Moderate",      "mediation",         "Mediation referenced"),
+        ("legal_escalation", "Moderate",      "arbitration",       "Arbitration referenced"),
+        ("legal_escalation", "Moderate",      "deposition",        "Deposition activity"),
+        # Coverage
+        ("coverage_adequacy", "High",         "reservation of rights","ROR issued"),
+        ("coverage_adequacy", "High",         "exclusion",         "Policy exclusion referenced"),
+        ("coverage_adequacy", "High",         "denied",            "Coverage denial language"),
+        ("coverage_adequacy", "High",         "coverage dispute",  "Coverage dispute identified"),
+        # Severity
+        ("severity",          "Highly Severe","wrongful death",    "Wrongful death claim"),
+        ("severity",          "Highly Severe","fatal",             "Fatal outcome referenced"),
+        ("severity",          "High",         "catastrophic",      "Catastrophic injury/loss"),
+        ("severity",          "High",         "permanent",         "Permanent disability/injury"),
+        ("severity",          "High",         "surgery",           "Surgery referenced"),
+        # Recovery
+        ("recovery_subrogation","High",       "third party",       "Third party involvement"),
+        ("recovery_subrogation","High",       "subrogation",       "Subrogation opportunity"),
+        ("recovery_subrogation","High",       "vendor",            "Vendor fault identified"),
+        # Fraud
+        ("fraud_indicator",   "High",         "inconsistent",      "Inconsistency detected"),
+        ("fraud_indicator",   "High",         "suspicious",        "Suspicious circumstances"),
+        ("fraud_indicator",   "Highly Severe","misrepresentation", "Misrepresentation noted"),
+        ("fraud_indicator",   "Highly Severe","false",             "False statement detected"),
     ],
     "FNOL": [
-        ("severity",           "High",          "fatality",       "Fatality or death indicated in report."),
-        ("severity",           "High",          "hospitalized",   "Hospitalization reported."),
-        ("severity",           "Highly Severe", "total loss",     "Total loss of vehicle or property indicated."),
-        ("fraud_indicator",    "High",          "inconsistent",   "Inconsistency in reported details detected."),
-        ("legal_escalation",   "High",          "attorney",       "Attorney representation noted at FNOL stage."),
-        ("medical_complexity", "Moderate",      "surgery",        "Surgical procedure mentioned."),
-        ("medical_complexity", "High",          "permanent",      "Permanent injury or disability indicated."),
+        ("severity",           "Highly Severe","fatality",         "Fatality reported at FNOL"),
+        ("severity",           "Highly Severe","death",            "Death reported"),
+        ("severity",           "Highly Severe","fatal",            "Fatal injury indicated"),
+        ("severity",           "Highly Severe","total loss",       "Total loss indicated"),
+        ("severity",           "Highly Severe","catastrophic",     "Catastrophic loss reported"),
+        ("severity",           "High",         "hospitalized",     "Hospitalization reported"),
+        ("severity",           "High",         "surgery",          "Surgery required"),
+        ("severity",           "High",         "fracture",         "Fracture injury reported"),
+        ("severity",           "High",         "severe",           "Severe injury/damage noted"),
+        ("severity",           "High",         "icu",              "ICU treatment indicated"),
+        ("severity",           "High",         "emergency room",   "ER visit documented"),
+        ("severity",           "Moderate",     "moderate",         "Moderate injury noted"),
+        ("severity",           "Moderate",     "emergency",        "Emergency response"),
+        ("severity",           "Low",          "minor",            "Minor injury reported"),
+        ("legal_escalation",   "Highly Severe","criminal",         "Criminal charges referenced"),
+        ("legal_escalation",   "High",         "attorney",         "Attorney involvement at FNOL"),
+        ("legal_escalation",   "High",         "lawsuit",          "Lawsuit referenced"),
+        ("legal_escalation",   "High",         "demand",           "Demand made by claimant"),
+        ("legal_escalation",   "Moderate",     "considering attorney","Claimant considering attorney"),
+        ("medical_complexity", "Highly Severe","permanent",        "Permanent condition noted"),
+        ("medical_complexity", "High",         "surgery",          "Surgery documented"),
+        ("medical_complexity", "High",         "hospitalization",  "Hospitalization required"),
+        ("medical_complexity", "Moderate",     "physical therapy", "PT prescribed"),
+        ("medical_complexity", "Moderate",     "specialist",       "Specialist referral"),
+        ("fraud_indicator",    "High",         "inconsistent",     "Inconsistency at FNOL"),
+        ("fraud_indicator",    "High",         "suspicious",       "Suspicious circumstances"),
+        ("fraud_indicator",    "High",         "staged",           "Staged incident suspected"),
+        ("fraud_indicator",    "Moderate",     "delayed reporting","Delayed loss reporting"),
+        ("fraud_indicator",    "Moderate",     "no witnesses",     "No witnesses to incident"),
+        ("recovery_subrogation","High",        "third party",      "Third party involvement"),
+        ("recovery_subrogation","High",        "other driver",     "Other driver at fault"),
+        ("recovery_subrogation","High",        "other vehicle",    "Other vehicle involved"),
     ],
     "Medical": [
-        ("medical_complexity", "High",          "surgery",        "Surgical procedure documented."),
-        ("medical_complexity", "Highly Severe", "permanent",      "Permanent disability or injury noted."),
-        ("medical_complexity", "High",          "chronic",        "Chronic condition identified."),
-        ("medical_complexity", "Moderate",      "specialist",     "Specialist referral indicated."),
-        ("fraud_indicator",    "High",          "inconsistent",   "Medical record inconsistency detected."),
+        ("medical_complexity", "Highly Severe","permanent disability","Permanent disability"),
+        ("medical_complexity", "Highly Severe","amputation",          "Amputation documented"),
+        ("medical_complexity", "Highly Severe","paralysis",           "Paralysis documented"),
+        ("medical_complexity", "High",         "surgery",             "Surgery documented"),
+        ("medical_complexity", "High",         "hospitalization",     "Hospitalization required"),
+        ("medical_complexity", "High",         "chronic",             "Chronic condition identified"),
+        ("medical_complexity", "High",         "specialist",          "Specialist referral"),
+        ("medical_complexity", "High",         "multiple procedures", "Multiple procedures"),
+        ("medical_complexity", "High",         "ptsd",                "PTSD diagnosed"),
+        ("medical_complexity", "High",         "pre-existing",        "Pre-existing condition"),
+        ("medical_complexity", "Moderate",     "physical therapy",    "PT prescribed"),
+        ("medical_complexity", "Moderate",     "chiropractic",        "Chiropractic treatment"),
+        ("medical_complexity", "Moderate",     "ongoing treatment",   "Ongoing treatment"),
+        ("severity",           "Highly Severe","fatal",               "Fatal outcome"),
+        ("severity",           "Highly Severe","death",               "Death referenced"),
+        ("severity",           "High",         "surgery required",    "Surgery required"),
+        ("severity",           "High",         "hospitalized",        "Hospitalized"),
+        ("severity",           "High",         "severe injury",       "Severe injury"),
+        ("fraud_indicator",    "High",         "inconsistent",        "Inconsistent records"),
+        ("fraud_indicator",    "High",         "duplicate",           "Duplicate billing"),
+        ("fraud_indicator",    "High",         "upcoding",            "Upcoding suspected"),
+        ("fraud_indicator",    "Moderate",     "unusual",             "Unusual treatment pattern"),
+        ("recovery_subrogation","High",        "third party",         "Third party responsible"),
     ],
     "Loss Run": [
-        ("severity",       "High",     "open",      "Open claims identified in loss run."),
-        ("fraud_indicator","Moderate", "frequency", "High claim frequency may indicate systemic issue."),
-        ("coverage_issue", "Moderate", "reserve",   "Large reserve amounts noted."),
+        ("severity",           "Highly Severe","catastrophic",        "Catastrophic loss"),
+        ("severity",           "Highly Severe","fatal",               "Fatal claim"),
+        ("severity",           "High",         "open",                "Open claims present"),
+        ("severity",           "High",         "large loss",          "Large loss identified"),
+        ("severity",           "High",         "reserve",             "Significant reserves"),
+        ("severity",           "High",         "adverse development",  "Adverse development"),
+        ("severity",           "Moderate",     "litigation",           "Litigated claims"),
+        ("fraud_indicator",    "High",         "high frequency",       "High claim frequency"),
+        ("fraud_indicator",    "High",         "spike",                "Claim frequency spike"),
+        ("fraud_indicator",    "Moderate",     "unusual pattern",      "Unusual claim pattern"),
+        ("fraud_indicator",    "Moderate",     "repeat",               "Repeat claimants"),
+        ("coverage_adequacy",  "High",         "coverage dispute",     "Coverage dispute"),
+        ("coverage_adequacy",  "High",         "reservation of rights","ROR issued"),
+        ("coverage_adequacy",  "Moderate",     "reserve adequacy",     "Reserve adequacy concern"),
+    ],
+    "Underwriting": [
+        ("risk_severity",      "Highly Severe","catastrophic",         "Catastrophic exposure"),
+        ("risk_severity",      "Highly Severe","cat zone",             "CAT zone exposure"),
+        ("risk_severity",      "Highly Severe","zone ae",              "FEMA Zone AE flood risk"),
+        ("risk_severity",      "High",         "fire",                 "Fire loss/hazard"),
+        ("risk_severity",      "High",         "theft",                "Theft loss"),
+        ("risk_severity",      "High",         "total loss",           "Total loss"),
+        ("risk_severity",      "High",         "high hazard",          "High hazard"),
+        ("risk_severity",      "High",         "open loss",            "Open/reserved loss"),
+        ("risk_severity",      "Moderate",     "wind damage",          "Wind damage"),
+        ("risk_severity",      "Moderate",     "water damage",         "Water damage"),
+        ("coverage_adequacy",  "High",         "underinsured",         "Underinsurance risk"),
+        ("coverage_adequacy",  "High",         "coverage gap",         "Coverage gap identified"),
+        ("coverage_adequacy",  "High",         "inadequate",           "Inadequate coverage"),
+        ("risk_appetite",      "High",         "non-renewing",         "Non-renewal noted"),
+        ("risk_appetite",      "High",         "reason for marketing", "Marketing reason noted"),
+        ("risk_appetite",      "High",         "loss activity",        "Loss activity noted"),
+        ("fraud_indicator",    "High",         "inconsistent",         "Inconsistency detected"),
+        ("fraud_indicator",    "Highly Severe","misrepresentation",    "Misrepresentation"),
+        ("recovery_subrogation","High",        "third party",          "Third party involved"),
     ],
 }
 
 _SIGNAL_KEYWORDS_GENERIC: list[tuple[str, str, str, str]] = [
-    ("fraud_indicator",  "High",          "fraud",        "Fraud keyword detected in document."),
-    ("fraud_indicator",  "High",          "misrepresent", "Misrepresentation language detected."),
-    ("fraud_indicator",  "High",          "false claim",  "False claim language detected."),
-    ("legal_escalation", "Highly Severe", "criminal",     "Criminal reference detected."),
-    ("severity",         "High",          "death",        "Reference to death in document."),
-    ("severity",         "High",          "deceased",     "Deceased party mentioned."),
-    ("severity",         "High",          "fatal",        "Fatality language detected."),
+    # Severity
+    ("severity",           "Highly Severe", "death",             "Death referenced"),
+    ("severity",           "Highly Severe", "deceased",          "Deceased party mentioned"),
+    ("severity",           "Highly Severe", "fatal",             "Fatality language"),
+    ("severity",           "Highly Severe", "wrongful death",    "Wrongful death"),
+    ("severity",           "Highly Severe", "catastrophic",      "Catastrophic event"),
+    ("severity",           "High",          "surgery",           "Surgery referenced"),
+    ("severity",           "High",          "hospitalized",      "Hospitalization"),
+    ("severity",           "High",          "permanent",         "Permanent injury/damage"),
+    # Legal
+    ("legal_escalation",   "Highly Severe", "criminal",          "Criminal reference"),
+    ("legal_escalation",   "Highly Severe", "punitive",          "Punitive damages"),
+    ("legal_escalation",   "Highly Severe", "bad faith",         "Bad faith allegation"),
+    ("legal_escalation",   "High",          "attorney",          "Attorney involvement"),
+    ("legal_escalation",   "High",          "lawsuit",           "Lawsuit referenced"),
+    ("legal_escalation",   "High",          "litigation",        "Litigation referenced"),
+    # Fraud
+    ("fraud_indicator",    "Highly Severe", "fraud",             "Fraud language detected"),
+    ("fraud_indicator",    "Highly Severe", "misrepresent",      "Misrepresentation"),
+    ("fraud_indicator",    "Highly Severe", "staged",            "Staged incident"),
+    ("fraud_indicator",    "High",          "inconsistent",      "Inconsistency detected"),
+    ("fraud_indicator",    "High",          "suspicious",        "Suspicious activity"),
+    # Medical
+    ("medical_complexity", "High",          "surgery",           "Surgery required"),
+    ("medical_complexity", "High",          "specialist",        "Specialist referral"),
+    ("medical_complexity", "Moderate",      "physical therapy",  "PT prescribed"),
+    # Recovery
+    ("recovery_subrogation","High",         "third party",       "Third party liability"),
+    ("recovery_subrogation","High",         "subrogation",       "Subrogation opportunity"),
+    # Coverage
+    ("coverage_adequacy",  "High",          "exclusion",         "Policy exclusion"),
+    ("coverage_adequacy",  "High",          "denial",            "Coverage denial"),
+    ("coverage_adequacy",  "High",          "reservation",       "Reservation of rights"),
 ]
+
+# ── Keyword signal confidence scoring ─────────────────────────────────────────
+_SIGNAL_CONFIDENCE: dict[str, dict[str, float]] = {
+    "wrongful death":      {"base": 0.95},
+    "fatal":               {"base": 0.90},
+    "death":               {"base": 0.90},
+    "deceased":            {"base": 0.90},
+    "catastrophic":        {"base": 0.88},
+    "punitive":            {"base": 0.92},
+    "bad faith":           {"base": 0.92},
+    "class action":        {"base": 0.95},
+    "fraud":               {"base": 0.90},
+    "misrepresentation":   {"base": 0.88},
+    "staged":              {"base": 0.85},
+    "criminal":            {"base": 0.90},
+    "permanent disability":{"base": 0.88},
+    "amputation":          {"base": 0.92},
+    "paralysis":           {"base": 0.92},
+    "surgery":             {"base": 0.75},
+    "attorney":            {"base": 0.78},
+    "lawsuit":             {"base": 0.80},
+    "litigation":          {"base": 0.80},
+    "hospitalized":        {"base": 0.75},
+    "fracture":            {"base": 0.72},
+    "subrogation":         {"base": 0.78},
+    "reservation of rights":{"base": 0.82},
+    "torn":                {"base": 0.55},
+    "severe":              {"base": 0.60},
+    "injury":              {"base": 0.55},
+    "damage":              {"base": 0.50},
+    "pain":                {"base": 0.45},
+    "inconsistent":        {"base": 0.60},
+    "suspicious":          {"base": 0.62},
+    "open":                {"base": 0.45},
+    "reserve":             {"base": 0.50},
+}
+
+_SEVERITY_CONFIDENCE_BOOST: dict[str, float] = {
+    "Highly Severe": +0.05,
+    "High":          +0.02,
+    "Moderate":       0.00,
+    "Low":           -0.05,
+}
+
+def _get_keyword_signal_confidence(keyword: str, severity: str) -> float:
+    base  = _SIGNAL_CONFIDENCE.get(keyword.lower(), {}).get("base", 0.55)
+    boost = _SEVERITY_CONFIDENCE_BOOST.get(severity, 0.0)
+    return round(min(0.97, max(0.30, base + boost)), 2)
 
 
 def _synthesize_signals_from_entities(intelligence: dict) -> list[dict]:
@@ -322,23 +593,30 @@ def _synthesize_signals_from_entities(intelligence: dict) -> list[dict]:
         dedup_key = f"{sig_type}:{keyword}"
         if dedup_key in seen:
             continue
-        if keyword.lower() in corpus:
-            seen.add(dedup_key)
-            idx = corpus.find(keyword.lower())
 
-            # Find clean word boundary to avoid mid-word cuts
-            snippet_start = max(0, idx - 80)
-            while snippet_start > 0 and corpus[snippet_start - 1] not in (' ', '\n', '.'):
-                snippet_start -= 1
+        _match = _re_kw.search(r'\b' + _re_kw.escape(keyword.lower()) + r'\b', corpus)
+        if not _match:
+            continue
 
-            snippet = corpus[snippet_start: idx + 200].strip().replace("\n", " ")
-            signals.append({
-                "type":            sig_type,
-                "severity_level":  severity,
-                "description":     description,
-                "supporting_text": snippet,
-                "_synthesized":    True,
-            })
+        seen.add(dedup_key)
+        idx = _match.start()
+
+        # Find clean word boundary to avoid mid-word cuts
+        snippet_start = max(0, idx - 80)
+        while snippet_start > 0 and corpus[snippet_start - 1] not in (' ', '\n', '.'):
+            snippet_start -= 1
+
+        snippet = corpus[snippet_start: idx + 200].strip().replace("\n", " ")
+        signals.append({
+            "type":            sig_type,
+            "severity_level":  severity,
+            "description":     description,
+            "supporting_text": snippet,
+            "trigger_matched": keyword,
+            "confidence":      _get_keyword_signal_confidence(keyword, severity),
+            "_synthesized":    True,
+            "_source":         "keyword",
+        })
 
     return signals
 
@@ -792,6 +1070,165 @@ def _bbox_covers_too_much(polygon, page_w, page_h, max_fraction=0.25) -> bool:
     return area / (page_w * page_h) > max_fraction
 
 
+def _is_value_semantically_valid(field_name: str, value: str) -> bool:
+    import re as _re
+
+    if not value or not value.strip():
+        return False
+
+    v      = value.strip()
+    fname  = field_name.strip().lower()
+    words  = v.split()
+
+    # ── Early exit: short field name + conversational value ──────────────
+    # Catches "CR": "This is fine. First, are you safe right now?" immediately
+    if len(field_name.strip()) <= 4 and len(words) >= 4:
+        import re as _re_early
+        _has_verb = bool(_re_early.search(
+            r'\b(is|are|was|were|do|does|can|could|would|should|'
+            r'have|has|had|will|feel|need|want|think|know|see|'
+            r'said|told|asked|fine|safe|right|okay|sure)\b',
+            v, _re_early.IGNORECASE
+        ))
+        if _has_verb:
+            return False
+
+    # ── Rule 0: Reject multi-line values for non-description fields ───────
+    _LONG_OK_FIELDS = {"description", "summary", "narrative", "complaint",
+                       "cause of loss", "description of loss", "treatment",
+                       "case complaint", "overview"}
+    has_newline = "\n" in v
+    line_count  = v.count("\n") + 1
+    if has_newline and line_count >= 2 and not any(lf in fname for lf in _LONG_OK_FIELDS):
+        return False
+
+    # ── Rule 0b: Reject if value contains standalone digits on separate lines ──
+    # e.g. "Hon. 1ST CIRCUIT\n3\n0" or "1ST\n3"
+    _lines = [l.strip() for l in v.split("\n") if l.strip()]
+    if len(_lines) >= 2:
+        _digit_only_lines = sum(1 for l in _lines if _re.match(r'^\d+$', l))
+        if _digit_only_lines >= 1:
+            return False
+
+    # ── Rule 1: Date fields must look like a date ─────────────────────────
+    _DATE_FIELDS = {"date", "due date", "date of loss", "date of service",
+                    "filing date", "incident date", "report date", "date filed"}
+    if any(df in fname for df in _DATE_FIELDS):
+        if len(v) > 45:
+            return False
+        if "$" in v:
+            return False
+
+    # ── Rule 2: Name fields must not be long prose ────────────────────────
+    _NAME_FIELDS = {"patient", "patient name", "claimant", "plaintiff",
+                    "defendant", "insured", "policyholder", "provider name",
+                    "adjuster", "attorney"}
+    if any(nf in fname for nf in _NAME_FIELDS):
+        if len(words) > 10 or "$" in v or "\n" in v:
+            return False
+        if _re.search(r'\$[\d,]+|\d{2}/\d{2}/\d{2}|Balance|Payment|Charges', v):
+            return False
+
+    # ── Rule 3: Billing blob rejection ───────────────────────────────────
+    _BILLING_SIGNALS = [r'\$[\d,]+\.\d{2}', r'\d{2}/\d{2}/\d{2}',
+                        r'Balance', r'Payment', r'Adjustment']
+    billing_hits = sum(
+        1 for pat in _BILLING_SIGNALS
+        if _re.search(pat, v, _re.IGNORECASE)
+    )
+    if billing_hits >= 3:
+        return False
+
+    # ── Rule 4: Reject long values for non-description fields ─────────────
+    if not any(lf in fname for lf in _LONG_OK_FIELDS):
+        if len(v) > 300:
+            return False
+
+    # ── Rule 5: Years in business must be a duration ──────────────────────
+    _DURATION_FIELDS = {"years in business", "time in business", "years operating",
+                        "years established", "business age"}
+    if any(df in fname.lower() for df in _DURATION_FIELDS):
+        import re as _re_dur
+        if _re_dur.match(r'^(19|20)\d{2}$', v.strip()):
+            return False
+
+    # ── Rule 6: Circuit/Division fields — reject if value contains bare numbers ──
+    _STRUCTURAL_FIELDS = {"circuit", "division", "docket"}
+    if any(sf in fname for sf in _STRUCTURAL_FIELDS):
+        # Reject values that are just a number or start with a number alone
+        if _re.match(r'^\d+$', v.strip()):
+            return False
+        # Reject if it's just one word that's a number suffix like "3" or "0"
+        if len(words) <= 2 and all(_re.match(r'^\d+$', w) for w in words):
+            return False
+
+    # ── Rule 7: Reject values that look like multi-field dumps ────────────
+    # e.g. "Attorney Faizan\nMarch 1st, 2024" for a "Docket" field
+    _SINGLE_VALUE_FIELDS = {"circuit", "division", "judge", "status",
+                             "category", "docket", "matter type", "practice area"}
+    if any(sf in fname for sf in _SINGLE_VALUE_FIELDS):
+        if line_count >= 2:
+            return False
+        # Also reject if multiple dates appear in a single-value field
+        if len(_re.findall(r'\b(?:jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)\w*\s+\d{1,2}',
+                           v, _re.IGNORECASE)) > 1:
+            return False
+
+    # ── Rule 8: Minimum meaningful length ────────────────────────────────
+    if len(v.strip()) < 2:
+        return False
+
+    # ── Rule 9: Reject dialogue / conversational sentences ───────────────
+    import re as _re_conv
+    _is_question = (
+        v.strip().endswith("?")
+        or bool(_re_conv.match(
+            r'^(what|when|where|who|why|how|is are|was|were|do|does|did|'
+            r'can|could|would|should|have|has)\b',
+            v.strip(), _re_conv.IGNORECASE
+        ))
+    )
+    if _is_question:
+        return False
+
+    _is_dialogue = bool(_re_conv.search(
+        r'\b(are you|can you|do you|is this|i understand|this is|'
+        r'please|thank you|hello|goodbye|okay|ok|sure|absolutely|'
+        r'correct|right|first are|sounds good|makes sense|'
+        r'go ahead|of course|no problem|let me|i need|i want|'
+        r'i have|i feel|i think|we need|we have)\b',
+        v, _re_conv.IGNORECASE
+    ))
+    if _is_dialogue:
+        return False
+
+    _is_prose_sentence = bool(_re_conv.search(
+        r'\b(is|was|were|has|have|had|will|would|can|could|caused|'
+        r'suffered|sustained|occurred|happened|resulted|indicates|'
+        r'appears|seems|found|shows|states|reports|provides)\b',
+        v, _re_conv.IGNORECASE
+    )) and len(v.split()) >= 4
+
+    # Short field-like names (≤3 chars) must never have prose values
+    if len(field_name.strip()) <= 3 and len(v.split()) >= 4:
+        return False
+
+    # Any value that reads like a full sentence (verb + 4+ words) is invalid
+    # for non-description fields
+    if _is_prose_sentence and not any(
+        lf in fname for lf in _LONG_OK_FIELDS
+    ):
+        return False
+
+    # ── Rule 10: Reject multi-word values for very short field names ──────
+    # e.g. field "CR" with value "This is fine. First, are you safe?"
+    _SHORT_FIELD_NAMES = len(field_name.strip()) <= 4
+    _LONG_VALUE = len(v.split()) >= 5
+    if _SHORT_FIELD_NAMES and _LONG_VALUE:
+        return False
+
+    return True
+
 # ─────────────────────────────────────────────────────────────────────────────
 # LLM ENTITIES ENRICHED WITH AZURE DI
 # ─────────────────────────────────────────────────────────────────────────────
@@ -834,8 +1271,17 @@ def _get_intelligence_entities(selected_sheet: str) -> list[tuple[str, dict]]:
 
     out: list[tuple[str, dict]] = []
 
+    # Use list-based deleted tracking (lists survive st.rerun better than sets)
+    _deleted = set(st.session_state.get("_deleted_fields_list", []))  # ← ADD THIS
+
     for entity_name, entity_data in entities.items():
+        if entity_name in _deleted:          # ← ADD THIS
+            continue
         if not isinstance(entity_data, dict):
+            continue
+        
+        # PATCH: reject suspiciously short field names (CR, A, B, single chars)
+        if len((entity_name or "").strip()) <= 2:
             continue
 
     # ───────── PATCH: damage text normalization ─────────
@@ -848,14 +1294,87 @@ def _get_intelligence_entities(selected_sheet: str) -> list[tuple[str, dict]]:
             if not has_number or has_keywords:
                entity_name = "damage description"
     # ───────────────────────────────────────────────────
-
-        llm_value = entity_data.get("value", "")
-        llm_conf  = float(entity_data.get("confidence", 0.0))    
-        if not isinstance(entity_data, dict):
-            continue
-
         llm_value = entity_data.get("value", "")
         llm_conf  = float(entity_data.get("confidence", 0.0))
+
+        # PATCH: reject short field names
+        if len((entity_name or "").strip()) <= 2:
+            continue
+
+        # PATCH: stricter value quality filter for TXT sources
+        _is_txt = st.session_state.get("_pdf_intelligence", {}).get("source") == "txt"
+        _raw_val_check = (llm_value or "").strip()
+
+        import re as _re_prose_ent
+
+        # ── Dialogue detection — any conversational phrase ────────────────
+        _is_dialogue = bool(_re_prose_ent.search(
+            r'\b(are you|can you|do you|is this|i understand|this is|'
+            r'please|thank you|hello|goodbye|yes|no sir|no ma\'am|'
+            r'okay|ok|sure|absolutely|correct|right|exactly|'
+            r'first|second|third|actually|basically|honestly|'
+            r'i see|i know|i think|i feel|i need|i want|i have|'
+            r'we need|we have|we can|let me|let us|go ahead|'
+            r'of course|no problem|sounds good|makes sense)\b',
+            _raw_val_check, _re_prose_ent.IGNORECASE
+        ))
+
+        # ── Prose/sentence detection — any verb-driven sentence ───────────
+        _is_prose = bool(_re_prose_ent.search(
+            r'\b(is|was|were|has|have|had|will|would|can|could|caused|'
+            r'traced|completed|attached|walk|run|said|told|asked|'
+            r'replied|mentioned|noted|confirmed|suffered|sustained|'
+            r'occurred|happened|resulted|indicates|appears|seems|'
+            r'found|shows|states|states|reports|provides|contains)\b',
+            _raw_val_check, _re_prose_ent.IGNORECASE
+        )) and len(_raw_val_check.split()) >= 3
+
+        # ── Question detection — ends with ? or starts with question word ─
+        _is_question = (
+            _raw_val_check.strip().endswith("?")
+            or bool(_re_prose_ent.match(
+                r'^(what|when|where|who|why|how|is|are|was|were|do|does|did|'
+                r'can|could|would|should|have|has)\b',
+                _raw_val_check.strip(), _re_prose_ent.IGNORECASE
+            ))
+        )
+
+        # ── Punctuation pattern — multiple sentences or exclamations ──────
+        _is_multi_sentence = (
+            len(_re_prose_ent.findall(r'[.!?]', _raw_val_check)) >= 2
+        )
+
+        # ── Short field name with long conversational value ───────────────
+        _field_name_is_short = len((entity_name or "").strip()) <= 3
+        _value_is_long_prose = len(_raw_val_check.split()) >= 4
+
+        # For TXT sources: reject any of these patterns
+        if _is_txt and (
+            _is_dialogue
+            or _is_question
+            or _is_multi_sentence
+            or (_field_name_is_short and _value_is_long_prose)
+            or (_is_prose and len(_raw_val_check.split()) >= 3)
+        ):
+            continue
+
+        # For non-TXT sources: only reject high-confidence prose
+        if not _is_txt and _is_prose and len(_raw_val_check.split()) >= 4:
+            if float(entity_data.get("confidence", 1.0)) < 0.15:
+                continue
+
+        if not _is_txt and _is_prose and len(_raw_val_check.split()) >= 4:
+            if float(entity_data.get("confidence", 1.0)) < 0.15:
+                continue
+
+
+        # PATCH: also reject if field name contains commentary/note words
+        import re as _re_fname
+        if _re_fname.search(
+            r'\b(commentary|comment|note|notes|narrative|remarks)\b',
+            entity_name, _re_fname.IGNORECASE
+        ):
+            continue
 
         field_info: dict = {
             "_source": intel.get("source", ""),
@@ -978,11 +1497,116 @@ def _get_intelligence_entities(selected_sheet: str) -> list[tuple[str, dict]]:
                     )
                     if not _found:
                         continue
-        # ── END DATE FILTER ──────────────────────────────────────────────────
 
+        # ── PATCH: semantic value sanity check ───────────────────────────
+        _display_value = field_info.get("value", "") or ""
+        if not _is_value_semantically_valid(entity_name, _display_value):
+            continue
+        # ── END DATE FILTER ──────────────────────────────────────────────────
+        
         out.append((entity_name, field_info))
         
+    # ── ADI BACKFILL — surface ADI fields the LLM missed due to text truncation ──
+    _EMPTY_ADI_VALUES = {
+        "not found", "n/a", "na", "none", "unknown", "not available",
+        "not stated", "not specified", "not provided", "unspecified",
+        "see narrative", "not applicable", "-", "—", "",
+    }
 
+    # Build a set of already-covered normalised names to avoid duplicates
+    _covered_nnames = {_nk(fname) for fname, _ in out}
+
+    intel_full = st.session_state.get("_pdf_intelligence", {})
+    az_index   = intel_full.get("azure_di_index", {})
+    eds_ref    = _edits()
+
+    for az_name, az_info in az_index.items():
+        if not isinstance(az_info, dict):
+            continue
+
+        az_val = (az_info.get("value") or "").strip()
+        if not az_val or az_val.lower() in _EMPTY_ADI_VALUES:
+            continue
+
+        # Skip if this field is already covered by LLM output (name OR value match)
+        az_norm = _nk(az_name)
+        already_covered = False
+
+        # Name match
+        if az_norm in _covered_nnames:
+            already_covered = True
+
+        # Value match (same value under a different label already surfaced)
+        if not already_covered:
+            for _, existing_fi in out:
+                if (existing_fi.get("value") or "").strip().lower() == az_val.lower():
+                    already_covered = True
+                    break
+
+        if already_covered:
+            continue
+
+        # Doc-type allowlist filter for ADI backfill fields
+        _doc_type_for_filter = st.session_state.get(
+            "_pdf_intelligence", {}
+        ).get("doc_type", "")
+        _allowlist = _DOC_TYPE_ADI_ALLOWLIST.get(_doc_type_for_filter, set())
+        if _allowlist:
+            az_name_lower = az_name.strip().lower()
+            az_norm_lower = re.sub(r"[\s\-_:./]+", " ", az_name_lower).strip()
+            in_allowlist = any(
+                allowed in az_norm_lower or az_norm_lower in allowed
+                for allowed in _allowlist
+            )
+            if not in_allowlist:
+                continue  # skip ADI fields not relevant to this doc type
+
+        # Build field_info from ADI data directly
+        adi_conf = float(az_info.get("confidence", 0.0))
+        field_info_adi: dict = {
+            "_source":            intel_full.get("source", ""),
+            "value":              az_val,
+            "modified":           eds_ref.get(az_name, az_val),
+            "confidence":         adi_conf,
+            "source_text":        f"{az_name}: {az_val}",
+            "source_page":        az_info.get("source_page", 1),
+            "page_width":         az_info.get("page_width", 8.5),
+            "page_height":        az_info.get("page_height", 11.0),
+            "bounding_polygon":   az_info.get("bounding_polygon"),
+            "_adi_confidence":    adi_conf,
+            "_from_intelligence": False,
+            "_from_call_b":       False,
+            "_adi_matched":       True,
+            "_adi_matched_key":   az_name,
+            "_pymupdf_bbox":      False,
+            "_user_added":        False,
+        }
+
+        # Reject oversized bboxes
+        if _bbox_covers_too_much(
+            field_info_adi["bounding_polygon"],
+            field_info_adi["page_width"],
+            field_info_adi["page_height"],
+        ):
+            field_info_adi["bounding_polygon"] = None
+
+        # PyMuPDF fallback if ADI gave no bbox
+        if field_info_adi["bounding_polygon"] is None and az_val:
+            _try_pymupdf_bbox_for_entity(
+                field_info_adi,
+                field_info_adi["source_page"],
+                shared_doc=_fitz_doc_shared,
+            )
+        
+        # ── PATCH: semantic sanity check for ADI backfill fields ─────────
+        if not _is_value_semantically_valid(az_name, az_val):
+            continue
+
+        if az_name in _deleted:              
+            continue
+
+        out.append((az_name, field_info_adi))
+        _covered_nnames.add(az_norm)
 
     seen_values: dict[str, str] = {}
     seen_names:  set[str]       = set()
@@ -1343,13 +1967,6 @@ def _sync_edit(field_name: str, new_value: str, selected_sheet: str) -> None:
 # ─────────────────────────────────────────────────────────────────────────────
 
 def _delete_field(field_name: str, selected_sheet: str) -> None:
-    """
-    Remove a field from all storage locations:
-      • sheet_cache (raw Azure DI data)
-      • _pdf_intelligence entities
-      • _pdf_edits and _pdf_edit_hist
-      • _intel_entities_ session cache keys
-    """
     # 1. Remove from sheet_cache
     cache = st.session_state.get("sheet_cache", {})
     sheet_data = cache.get(selected_sheet, {})
@@ -1357,20 +1974,26 @@ def _delete_field(field_name: str, selected_sheet: str) -> None:
         if isinstance(page_dict, dict) and field_name in page_dict:
             del page_dict[field_name]
 
-    # 2. Remove from _pdf_intelligence entities
-    intel    = st.session_state.get("_pdf_intelligence", {})
-    entities = intel.get("analysis", {}).get("entities", {})
-    entities.pop(field_name, None)
-    # Also check type_specific
-    ts = intel.get("analysis", {}).get("type_specific", {})
-    ts.pop(field_name, None)
+    # 2. Remove from _pdf_intelligence entities AND type_specific AND azure_di_index
+    intel = st.session_state.get("_pdf_intelligence", {})
+    analysis = intel.get("analysis", {})
+    analysis.get("entities", {}).pop(field_name, None)
+    analysis.get("type_specific", {}).pop(field_name, None)
+    # Also remove from azure_di_index so ADI backfill doesn't resurrect it
+    intel.get("azure_di_index", {}).pop(field_name, None)
+    # Also remove any normalised variant from azure_di_index
+    _nk_deleted = _nk(field_name)
+    for _az_key in list(intel.get("azure_di_index", {}).keys()):
+        if _nk(_az_key) == _nk_deleted:
+            intel["azure_di_index"].pop(_az_key, None)
 
     # 3. Remove from edits and history
     st.session_state.get("_pdf_edits", {}).pop(field_name, None)
     st.session_state.get("_pdf_edit_hist", {}).pop(field_name, None)
 
-    # 4. Clear cached entity lists so they rebuild without this field
+    # 4. Clear ALL derived caches
     st.session_state.pop("_adi_lookup", None)
+    st.session_state.pop("_pdf_analysis_intel_fp", None)  # ← ADD THIS: forces fingerprint reset
     for k in list(st.session_state.keys()):
         if k.startswith("_intel_entities_"):
             st.session_state.pop(k, None)
@@ -1379,6 +2002,12 @@ def _delete_field(field_name: str, selected_sheet: str) -> None:
     em_key = "_pdf_edit_mode_fields"
     if em_key in st.session_state:
         st.session_state[em_key].discard(field_name)
+
+    # 6. Track deleted fields as a list (survives st.rerun better than set)
+    _df_list = st.session_state.get("_deleted_fields_list", [])
+    if field_name not in _df_list:
+        _df_list.append(field_name)
+    st.session_state["_deleted_fields_list"] = _df_list
 
 def _is_user_added_in_cache(field_name: str, selected_sheet: str) -> bool:
     """Check sheet_cache to see if a field was manually added by a user."""
@@ -2464,6 +3093,8 @@ def _render_entities_tab(
         "not stated", "not specified", "not provided", "unspecified",
         "see narrative", "not applicable", "-", "—", "",
     }
+    
+
     _non_bool_fields = [
         (fn, fi) for fn, fi in intel_fields
         if (fi.get("value") or "").strip().lower() not in {"yes", "no", "true", "false"}
@@ -2473,6 +3104,7 @@ def _render_entities_tab(
         )
         and (fi.get("value") or "").strip().lower() not in _EMPTY_PLACEHOLDERS_COUNT
     ]
+
 
     bbox_count = sum(1 for _, fi in _non_bool_fields if fi.get("bounding_polygon"))
     adi_count  = sum(
@@ -2549,12 +3181,31 @@ def _render_entities_tab(
         if (extracted or "").strip().lower() in _EMPTY_PLACEHOLDERS:
             continue
 
-        _is_txt_source = st.session_state.get("_pdf_intelligence", {}).get("source") == "txt"
-        _doc_type_cur  = st.session_state.get("_pdf_intelligence", {}).get("doc_type", "")
-        if _is_txt_source and _doc_type_cur == "FNOL":
-           _FNOL_TXT_SKIP = {"policyholder name", "policyholder_name", "policy holder name"}
-           if field_name.strip().lower() in _FNOL_TXT_SKIP:
-              continue
+        # ── PATCH: value sanity check at render time ──────────────────────
+        if not _is_value_semantically_valid(field_name, extracted):
+            continue
+
+        # ── PATCH: hard block on short field names with prose values ──────
+        import re as _re_render
+        if len(field_name.strip()) <= 4 and len((extracted or "").split()) >= 4:
+            continue
+        if (extracted or "").strip().endswith("?"):
+            continue
+        _has_convo = bool(_re_render.search(
+            r'\b(are you|can you|do you|is this|this is|first are|'
+            r'okay|ok|sure|right now|safe right|sounds good)\b',
+            extracted or "", _re_render.IGNORECASE
+        ))
+        if _has_convo:
+            continue
+        # ─────────────────────────────────────────────────────────────────
+
+        # _is_txt_source = st.session_state.get("_pdf_intelligence", {}).get("source") == "txt"
+        # _doc_type_cur  = st.session_state.get("_pdf_intelligence", {}).get("doc_type", "")
+        # if _is_txt_source and _doc_type_cur == "FNOL":
+        #    _FNOL_TXT_SKIP = {"policyholder name", "policyholder_name", "policy holder name"}
+        #    if field_name.strip().lower() in _FNOL_TXT_SKIP:
+        #       continue
 
         modified    = eds.get(field_name, field_info.get("modified", extracted))
         in_edit     = field_name in st.session_state[_EM_KEY]
@@ -2565,6 +3216,21 @@ def _render_entities_tab(
         is_unverified = field_info.get("_unverified", False)
         confidence  = _lookup_confidence(field_name, field_info)
         conf_pct    = int(confidence * 100)
+        
+
+        # PATCH: reject mis-extractions where value is prose and confidence is very low
+        
+        import re as _re_prose
+        _value_stripped = (extracted or "").strip()
+        _is_prose_value = (
+            len(_value_stripped.split()) >= 4
+            and bool(_re_prose.search(
+                r'\b(is|was|were|has|have|had|will|would|can|caused|traced|completed|attached)\b',
+                _value_stripped, _re_prose.IGNORECASE
+            ))
+        )
+        if _is_prose_value and confidence < 0.15:
+            continue
 
         # FEATURE A: Highlight user-added fields with a subtle green left border
         row_bg    = "#f0fdf4" if is_user else _BG
@@ -2639,15 +3305,33 @@ def _render_entities_tab(
 
         # FEATURE A: Action buttons — edit | eye | delete
         with c4:
-            if in_del_conf:
-                # Confirmation row: show "Sure?" + confirm/cancel
+            # Re-read live from session state — avoids stale local variable after rerun
+            _in_del_conf_live = field_name in st.session_state.get(_DEL_CONFIRM_KEY, set())
+
+            if _in_del_conf_live:
                 conf_c1, conf_c2 = st.columns(2)
                 with conf_c1:
                     if st.button("✓", key=f"_pbtn_delconfirm_{field_name}",
                                  help="Confirm delete",
                                  use_container_width=True):
+                        # Remove from confirm set FIRST
                         st.session_state[_DEL_CONFIRM_KEY].discard(field_name)
+                        # Delete from all storage
                         _delete_field(field_name, selected_sheet)
+                        # Also directly mutate _pdf_intelligence in session state
+                        # to guarantee it's gone before rerun
+                        _intel_live = st.session_state.get("_pdf_intelligence", {})
+                        _intel_live.get("analysis", {}).get("entities", {}).pop(field_name, None)
+                        _intel_live.get("analysis", {}).get("type_specific", {}).pop(field_name, None)
+                        # Store deleted field name as a list (lists survive rerun better than sets)
+                        _df_list = st.session_state.get("_deleted_fields_list", [])
+                        if field_name not in _df_list:
+                            _df_list.append(field_name)
+                        st.session_state["_deleted_fields_list"] = _df_list
+                        # Clear ALL entity caches
+                        for _k in list(st.session_state.keys()):
+                            if _k.startswith("_intel_entities_"):
+                                del st.session_state[_k]
                         st.toast(f'🗑 Field "{field_name}" deleted.')
                         st.rerun()
                 with conf_c2:
@@ -2679,7 +3363,6 @@ def _render_entities_tab(
                 with btn_eye:
                     _is_txt = st.session_state.get("_pdf_intelligence", {}).get("source") == "txt"
                     if is_user:
-                        # FEATURE B: User-added fields get dedicated popup
                         tip = "View field details — manually added by user"
                         if st.button("👁", key=f"_pbtn_eye_{field_name}", help=tip,
                                      use_container_width=True):
@@ -2706,8 +3389,7 @@ def _render_entities_tab(
                                 _no_bbox_pending_info = field_info
 
                 with btn_del:
-                    del_color = "#dc2626" if is_user else "#6b7280"
-                    del_tip   = "Delete this field (manually added)" if is_user else "Delete this field"
+                    del_tip = "Delete this field (manually added)" if is_user else "Delete this field"
                     if st.button("🗑", key=f"_pbtn_del_{field_name}",
                                  help=del_tip,
                                  use_container_width=True):
@@ -3137,23 +3819,220 @@ def _classify_severity(sig: dict, doc_type: str = "") -> str:
             return "Moderate"
         return "Low"
 
+# def _render_single_signal(
+#     sig: dict,
+#     level: str,
+#     tax: dict,
+#     tc: str,
+#     doc_type: str,
+# ) -> None:
+#     """
+#     PATCHED: NEW HELPER — renders a single signal card with source badge.
+#     Extracted from _render_signals_tab for clarity.
+#     """
+#     sig_type = sig.get("type", "unknown")
+#     m        = _get_signal_meta(sig_type, doc_type)
+#     c        = m["color"]
+ 
+#     # ── Source badge ───────────────────────────────────────────────────────
+#     _source = sig.get("_source", "")
+#     if _source == "llm":
+#         source_badge = (
+#             f"<span style='font-size:9px;color:#1e40af;background:#eff6ff;"
+#             f"border:1px solid #bfdbfe;border-radius:10px;"
+#             f"padding:1px 7px;font-family:monospace;margin-left:6px;'>"
+#             f"🤖 AI</span>"
+#         )
+#     elif _source == "llm_enriched":
+#         source_badge = (
+#             f"<span style='font-size:9px;color:#065f46;background:#ecfdf5;"
+#             f"border:1px solid #6ee7b7;border-radius:10px;"
+#             f"padding:1px 7px;font-family:monospace;margin-left:6px;'>"
+#             f"🔍 AI-Enriched</span>"
+#         )
+#     elif _source == "keyword":
+#         source_badge = (
+#             f"<span style='font-size:9px;color:#92400e;background:#fffbeb;"
+#             f"border:1px solid #fde68a;border-radius:10px;"
+#             f"padding:1px 7px;font-family:monospace;margin-left:6px;'>"
+#             f"🔑 Keyword</span>"
+#         )
+#     else:
+#         source_badge = (
+#             f"<span style='font-size:9px;color:#6b7280;background:#f3f4f6;"
+#             f"border:1px solid #d1d5db;border-radius:10px;"
+#             f"padding:1px 7px;font-family:monospace;margin-left:6px;'>"
+#             f"keyword</span>"
+#         )
+ 
+#     # ── Supporting text ────────────────────────────────────────────────────
+#     supporting_text = sig.get("supporting_text", "")
+#     supporting_html = ""
+#     if supporting_text:
+#         safe_text = (
+#             supporting_text
+#             .replace("&", "&amp;")
+#             .replace("<", "&lt;")
+#             .replace(">", "&gt;")
+#             .replace('"', "&quot;")
+#         )
+#         supporting_html = (
+#             f"<div style='font-size:11px;color:{_LBL};font-family:monospace;"
+#             f"background:{_BG2};border-left:2px solid {_BORDER2};padding:6px 10px;"
+#             f"border-radius:0 4px 4px 0;font-style:italic;"
+#             f"white-space:pre-wrap;word-break:break-word;"
+#             f"overflow-wrap:anywhere;margin-top:6px;'>"
+#             f"📄 &ldquo;{safe_text}&rdquo;</div>"
+#         )
+ 
+#     # ── Trigger badge ──────────────────────────────────────────────────────
+#     trigger_html = ""
+#     if sig.get("trigger_matched"):
+#         trigger_html = (
+#             f"<div style='font-size:10px;color:#0369a1;"
+#             f"background:#e0f2fe;border:1px solid #bae6fd;"
+#             f"border-radius:4px;padding:3px 10px;"
+#             f"display:inline-block;margin-top:6px;"
+#             f"font-family:monospace;'>"
+#             f"🎯 Trigger: <strong>{sig['trigger_matched']}</strong></div>"
+#         )
+ 
+#     # ── Confidence badge ───────────────────────────────────────────────────
+#     conf_html = ""
+#     sig_conf = float(sig.get("confidence", 0))
+#     if sig_conf > 0:
+#         conf_html = f"&nbsp;&nbsp;{_conf_badge(sig_conf)}"
+ 
+#     # ── Unverified warning ─────────────────────────────────────────────────
+#     unverified_html = ""
+#     if sig.get("_unverified"):
+#         unverified_html = (
+#             f"<span style='font-size:9px;color:#dc2626;"
+#             f"background:#fef2f2;border:1px solid #fecaca;"
+#             f"border-radius:10px;padding:1px 7px;"
+#             f"font-family:monospace;margin-left:6px;'>"
+#             f"⚠ unverified</span>"
+#         )
+ 
+#     st.markdown(
+#         f"<div style='background:{_BG};border:1px solid {_BORDER};"
+#         f"border-left:4px solid {tc};border-radius:8px;"
+#         f"padding:12px 16px;margin-bottom:8px;'>"
+#         f"<div style='display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;'>"
+#         f"<span style='font-size:14px;'>{m['icon']}</span>"
+#         f"<span style='font-size:11px;font-weight:700;color:{c};"
+#         f"font-family:monospace;text-transform:uppercase;letter-spacing:1px;'>"
+#         f"{m['label']}</span>"
+#         f"{source_badge}"
+#         f"{unverified_html}"
+#         f"<span style='margin-left:auto;font-size:9px;color:{tc};"
+#         f"background:{tax['bg']};border:1px solid {tc}30;border-radius:10px;"
+#         f"padding:1px 7px;font-family:monospace;white-space:nowrap;'>"
+#         f"{tax['icon']} {level}</span>"
+#         f"{conf_html}"
+#         f"</div>"
+#         f"<div style='font-size:13px;color:{_TXT};line-height:1.7;margin-bottom:6px;'>"
+#         f"{sig.get('description', '')}</div>"
+#         + supporting_html
+#         + trigger_html
+#         + "</div>",
+#         unsafe_allow_html=True,
+#     )
+
+def _render_single_signal(sig, level, tax, tc, doc_type):
+    sig_type = sig.get("type", "unknown")
+    m        = _get_signal_meta(sig_type, doc_type)
+    c        = m["color"]
+
+    _SOURCE_BAR_COLORS = {
+        "llm":          "#2563eb",
+        "llm_enriched": "#059669",
+        "keyword":      "#ca8a04",
+    }
+    src      = sig.get("_source", "keyword")
+    bar_color = _SOURCE_BAR_COLORS.get(src, "#ca8a04")
+
+    supporting_text = sig.get("supporting_text", "")
+    supporting_html = ""
+    if supporting_text:
+        safe_text = (supporting_text
+            .replace("&", "&amp;").replace("<", "&lt;")
+            .replace(">", "&gt;").replace('"', "&quot;"))
+        supporting_html = (
+            f"<div style='font-size:11px;color:{_LBL};font-family:monospace;"
+            f"background:{_BG2};border-left:2px solid {_BORDER2};padding:6px 10px;"
+            f"border-radius:0 4px 4px 0;font-style:italic;"
+            f"white-space:pre-wrap;word-break:break-word;margin-top:6px;'>"
+            f"📄 &ldquo;{safe_text}&rdquo;</div>"
+        )
+
+    trigger_html = ""
+    if sig.get("trigger_matched"):
+        trigger_html = (
+            f"<div style='font-size:10px;color:#0369a1;background:#e0f2fe;"
+            f"border:1px solid #bae6fd;border-radius:4px;padding:3px 10px;"
+            f"display:inline-block;margin-top:6px;font-family:monospace;'>"
+            f"🎯 Matched Signal: <strong>{sig['trigger_matched']}</strong></div>"
+        )
+
+    conf_html = ""
+    sig_conf = float(sig.get("confidence", 0))
+    if sig_conf > 0:
+        conf_html = f"&nbsp;&nbsp;{_conf_badge(sig_conf)}"
+
+    unverified_html = ""
+    if sig.get("_unverified"):
+        unverified_html = (
+            f"<span style='font-size:9px;color:#dc2626;background:#fef2f2;"
+            f"border:1px solid #fecaca;border-radius:10px;padding:1px 7px;"
+            f"font-family:monospace;margin-left:6px;'>⚠ unverified</span>"
+        )
+
+    # Colored left bar instead of source text badge
+    st.markdown(
+        f"<div style='background:{_BG};border:1px solid {_BORDER};"
+        f"border-radius:8px;padding:12px 16px;margin-bottom:8px;"
+        f"display:flex;gap:0;overflow:hidden;border-left:none;'>"
+        f"<div style='width:4px;flex-shrink:0;border-radius:4px 0 0 4px;"
+        f"margin-right:14px;background:{bar_color};'></div>"
+        f"<div style='flex:1;'>"
+        f"<div style='display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;'>"
+        f"<span style='font-size:14px;'>{m['icon']}</span>"
+        f"<span style='font-size:11px;font-weight:700;color:{c};"
+        f"font-family:monospace;text-transform:uppercase;letter-spacing:1px;'>"
+        f"{m['label']}</span>"
+        f"{unverified_html}"
+        f"<span style='margin-left:auto;font-size:9px;color:{tc};"
+        f"background:{tax['bg']};border:1px solid {tc}30;border-radius:10px;"
+        f"padding:1px 7px;font-family:monospace;white-space:nowrap;'>"
+        f"{tax['icon']} {level}</span>"
+        f"{conf_html}"
+        f"</div>"
+        f"<div style='font-size:13px;color:{_TXT};line-height:1.7;margin-bottom:6px;'>"
+        f"{sig.get('description', '')}</div>"
+        + supporting_html + trigger_html
+        + "</div></div>",
+        unsafe_allow_html=True,
+    )
+ 
 
 def _render_signals_tab(intelligence: dict) -> None:
+    """v13 PATCH: Signals grouped by type as compact 3-column tables. Source legend removed."""
+    import html as _html
+
     raw_llm_signals = intelligence.get("analysis", {}).get("signals", [])
     doc_type        = intelligence.get("doc_type", "")
 
-    synthesized = False
-    if raw_llm_signals:
-        signals = raw_llm_signals
-    else:
-        signals     = _synthesize_signals_from_entities(intelligence)
-        synthesized = bool(signals)
+    signals = raw_llm_signals
+    if not signals:
+        signals = _synthesize_signals_from_entities(intelligence)
+        for s in signals:
+            s["_source"] = "keyword"
 
     st.markdown(
         _section_header(
             "Signal Detection",
-            f"{len(signals)} signal(s) detected"
-            + (" · keyword synthesized" if synthesized else""),
+            f"{len(signals)} signal(s) detected",
         ),
         unsafe_allow_html=True,
     )
@@ -3162,139 +4041,173 @@ def _render_signals_tab(intelligence: dict) -> None:
         st.markdown(
             _card(
                 f"<div style='color:#16a34a;font-size:13px;font-family:monospace;'>"
-                f"✓ No significant signals detected.</div>",
+                f"✓ No significant signals detected after exhaustive scan.</div>",
                 border_color="#bbf7d0", bg="#f0fdf4",
             ),
             unsafe_allow_html=True,
         )
         return
 
-    grouped: dict[str, list[dict]] = {lv: [] for lv in _TAXONOMY}
+    # ── Group by severity first, then by signal type ──────────────────────
+    grouped_by_severity: dict[str, list[dict]] = {lv: [] for lv in _TAXONOMY}
     for sig in signals:
-        grouped[_classify_severity(sig, doc_type)].append(sig)
+        grouped_by_severity[_classify_severity(sig, doc_type)].append(sig)
 
+    # ── Severity summary pills ────────────────────────────────────────────
     pills = "".join(
         f"<span style='background:{_TAXONOMY[lv]['bg']};"
         f"border:1px solid {_TAXONOMY[lv]['color']}40;border-radius:20px;"
         f"padding:4px 12px;font-size:11px;font-weight:700;"
         f"color:{_TAXONOMY[lv]['color']};font-family:monospace;'>"
         f"{_TAXONOMY[lv]['icon']} {lv} ({len(sigs)})</span>"
-        for lv, sigs in grouped.items()
+        for lv, sigs in grouped_by_severity.items()
         if sigs
     )
     if pills:
         st.markdown(
-            f"<div style='display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px;'>"
+            f"<div style='display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;'>"
             f"{pills}</div>",
             unsafe_allow_html=True,
         )
 
+    # ── Render each severity band ─────────────────────────────────────────
     for level in ["Highly Severe", "High", "Moderate", "Low"]:
-        group_sigs = grouped.get(level, [])
-        if not group_sigs:
+        level_sigs = grouped_by_severity.get(level, [])
+        if not level_sigs:
             continue
+
         tax = _TAXONOMY[level]
         tc  = tax["color"]
 
+        # Section header for severity band
         st.markdown(
-            f"<div style='display:flex;align-items:center;gap:8px;margin:16px 0 8px 0;'>"
+            f"<div style='display:flex;align-items:center;gap:8px;margin:20px 0 12px 0;'>"
             f"<span style='font-size:16px;'>{tax['icon']}</span>"
             f"<span style='font-size:12px;font-weight:700;color:{tc};"
             f"font-family:monospace;text-transform:uppercase;letter-spacing:1.2px;'>{level}</span>"
             f"<div style='flex:1;height:1px;background:{tc}30;'></div>"
             f"<span style='font-size:10px;color:{tc};font-family:monospace;"
             f"background:{tax['bg']};border:1px solid {tc}30;border-radius:10px;"
-            f"padding:1px 8px;'>{len(group_sigs)} signal(s)</span>"
+            f"padding:1px 8px;'>{len(level_sigs)} signal(s)</span>"
             f"</div>",
             unsafe_allow_html=True,
         )
 
-        for sig in group_sigs:
-            sig_type = sig.get("type", "unknown")
+        # ── Group by signal type within this severity band ────────────────
+        type_groups: dict[str, list[dict]] = {}
+        for sig in level_sigs:
+            stype = sig.get("type", "unknown")
+            type_groups.setdefault(stype, []).append(sig)
+
+        for sig_type, type_sigs in type_groups.items():
             m = _get_signal_meta(sig_type, doc_type)
             c = m["color"]
-            source_badge = (
-                f"<span style='font-size:9px;color:#92400e;background:#fffbeb;"
-                f"border:1px solid #fde68a;border-radius:10px;"
-                f"padding:1px 7px;font-family:monospace;margin-left:6px;'>"
-                f"keyword</span>"
-                if sig.get("_synthesized") else
-                f"<span style='font-size:9px;color:#1e40af;background:#eff6ff;"
-                f"border:1px solid #bfdbfe;border-radius:10px;"
-                f"padding:1px 7px;font-family:monospace;margin-left:6px;'>"
-                f"AI</span>"
-            )
 
-            supporting_text = sig.get("supporting_text", "")
-            supporting_html = ""
-            if supporting_text:
-                safe_text = (
-                    supporting_text
-                    .replace("&", "&amp;")
-                    .replace("<", "&lt;")
-                    .replace(">", "&gt;")
-                    .replace('"', "&quot;")
-                )
-                supporting_html = (
-                    f"<div style='font-size:11px;color:{_LBL};font-family:monospace;"
-                    f"background:{_BG2};border-left:2px solid {_BORDER2};padding:6px 10px;"
-                    f"border-radius:0 4px 4px 0;font-style:italic;"
-                    f"white-space:pre-wrap;word-break:break-word;"
-                    f"overflow-wrap:anywhere;margin-top:6px;'>"
-                    f"📄 &ldquo;{safe_text}&rdquo;</div>"
-                )
-
-                # Add these after existing badge HTML in the signal card:
-
-                trigger_html = ""
-                if sig.get("trigger_matched"):
-                    trigger_html = (
-                        f"<div style='font-size:10px;color:#0369a1;"
-                        f"background:#e0f2fe;border:1px solid #bae6fd;"
-                        f"border-radius:4px;padding:3px 10px;"
-                        f"display:inline-block;margin-top:6px;"
-                        f"font-family:monospace;'>"
-                        f"🎯 Trigger: <strong>{sig['trigger_matched']}</strong></div>"
-                    )
-
-                conf_html = ""
-                sig_conf = float(sig.get("confidence", 0))
-                if sig_conf > 0:
-                    conf_html = (
-                        f"&nbsp;&nbsp;{_conf_badge(sig_conf)}"
-                    )
-
-                unverified_html = ""
-                if sig.get("_unverified"):
-                    unverified_html = (
-                        f"<span style='font-size:9px;color:#dc2626;"
-                        f"background:#fef2f2;border:1px solid #fecaca;"
-                        f"border-radius:10px;padding:1px 7px;"
-                        f"font-family:monospace;margin-left:6px;'>"
-                        f"⚠ unverified</span>"
-                    )
-
+            # ── Table header ──────────────────────────────────────────────
             st.markdown(
-                f"<div style='background:{_BG};border:1px solid {_BORDER};"
-                f"border-left:4px solid {tc};border-radius:8px;"
-                f"padding:12px 16px;margin-bottom:8px;'>"
-                f"<div style='display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap;'>"
-                f"<span style='font-size:14px;'>{m['icon']}</span>"
-                f"<span style='font-size:11px;font-weight:700;color:{c};"
+                f"<div style='display:flex;align-items:center;gap:8px;"
+                f"margin:14px 0 6px 0;'>"
+                f"<span style='font-size:15px;'>{m['icon']}</span>"
+                f"<span style='font-size:12px;font-weight:700;color:{c};"
                 f"font-family:monospace;text-transform:uppercase;letter-spacing:1px;'>"
                 f"{m['label']}</span>"
-                f"{source_badge}"
-                f"<span style='margin-left:auto;font-size:9px;color:{tc};"
-                f"background:{tax['bg']};border:1px solid {tc}30;border-radius:10px;"
-                f"padding:1px 7px;font-family:monospace;white-space:nowrap;'>"
-                f"{tax['icon']} {level}</span>"
-                f"</div>"
-                f"<div style='font-size:13px;color:{_TXT};line-height:1.7;margin-bottom:6px;'>"
-                f"{sig.get('description', '')}</div>"
-                + supporting_html
-                + "</div>",
+                f"<span style='font-size:10px;color:{_LBL};font-family:monospace;"
+                f"background:{_BG2};border:1px solid {_BORDER};border-radius:10px;"
+                f"padding:1px 8px;'>{len(type_sigs)} occurrence(s)</span>"
+                f"</div>",
                 unsafe_allow_html=True,
             )
+
+            # ── Build 3-column table rows ─────────────────────────────────
+            rows_html = ""
+            for i, sig in enumerate(type_sigs):
+                trigger     = _html.escape(sig.get("trigger_matched", "—") or "—")
+                description = _html.escape(sig.get("description", "—") or "—")
+                support_raw = (sig.get("supporting_text", "") or "").strip()
+                support = _html.escape(support_raw[:1200]) if support_raw else "—"
+
+                is_unverified = sig.get("_unverified", False)
+                row_bg = "#ffffff" if i % 2 == 0 else _BG2
+
+                unverified_marker = (
+                    f"<span style='font-size:9px;color:#dc2626;"
+                    f"background:#fef2f2;border:1px solid #fecaca;"
+                    f"border-radius:4px;padding:1px 5px;"
+                    f"font-family:monospace;margin-left:5px;'>⚠ unverified</span>"
+                    if is_unverified else ""
+                )
+
+                conf_val = float(sig.get("confidence", 0))
+                conf_html = (
+                    f"<span style='font-size:9px;color:{_LBL};"
+                    f"font-family:monospace;margin-left:5px;'>"
+                    f"{int(conf_val*100)}%</span>"
+                    if conf_val > 0 else ""
+                )
+
+                rows_html += (
+                    f"<tr style='background:{row_bg};'>"
+                    # Col 1: Trigger
+                    f"<td style='padding:10px 12px;border-bottom:1px solid {_BORDER};"
+                    f"border-right:1px solid {_BORDER};vertical-align:top;width:20%;'>"
+                    f"<div style='display:inline-flex;align-items:center;"
+                    f"background:{c}12;border:1px solid {c}30;border-radius:6px;"
+                    f"padding:3px 8px;font-size:11px;font-weight:700;"
+                    f"color:{c};font-family:monospace;white-space:nowrap;'>"
+                    f"🎯 {trigger}</div>"
+                    f"{conf_html}{unverified_marker}"
+                    f"</td>"
+                    # Col 2: Statement / Description
+                    f"<td style='padding:10px 12px;border-bottom:1px solid {_BORDER};"
+                    f"border-right:1px solid {_BORDER};vertical-align:top;width:35%;'>"
+                    f"<div style='font-size:12px;color:{_TXT};line-height:1.6;'>"
+                    f"{description}</div>"
+                    f"</td>"
+                    # Col 3: Verbatim quote
+                    f"<td style='padding:10px 12px;border-bottom:1px solid {_BORDER};"
+                    f"vertical-align:top;width:45%;'>"
+                    f"<div style='font-size:11px;color:{_LBL};font-family:monospace;"
+                    f"font-style:italic;line-height:1.6;"
+                    f"background:{_BG2};border-left:3px solid {c}40;"
+                    f"padding:6px 10px;border-radius:0 4px 4px 0;"
+                    f"word-break:break-word;overflow-wrap:anywhere;'>"
+                    + (f"&ldquo;{support}&rdquo;" if support != "—" else "<span style='color:#94a3b8;'>no verbatim snippet</span>")
+                    + f"</div>"
+                    f"</td>"
+                    f"</tr>"
+                )
+
+            # ── Render the table ──────────────────────────────────────────
+            st.markdown(
+                f"<div style='border:1px solid {_BORDER};border-radius:8px;"
+                f"overflow:hidden;margin-bottom:16px;'>"
+                f"<table style='width:100%;border-collapse:collapse;'>"
+                f"<thead>"
+                f"<tr style='background:{c}08;'>"
+                f"<th style='padding:8px 12px;text-align:left;font-size:10px;"
+                f"font-weight:700;color:{c};font-family:monospace;"
+                f"text-transform:uppercase;letter-spacing:1px;"
+                f"border-bottom:1px solid {_BORDER};border-right:1px solid {_BORDER};"
+                f"width:20%;'>Matched Signal</th>"
+                f"<th style='padding:8px 12px;text-align:left;font-size:10px;"
+                f"font-weight:700;color:{c};font-family:monospace;"
+                f"text-transform:uppercase;letter-spacing:1px;"
+                f"border-bottom:1px solid {_BORDER};border-right:1px solid {_BORDER};"
+                f"width:35%;'>Extracted Insight</th>"
+                f"<th style='padding:8px 12px;text-align:left;font-size:10px;"
+                f"font-weight:700;color:{c};font-family:monospace;"
+                f"text-transform:uppercase;letter-spacing:1px;"
+                f"border-bottom:1px solid {_BORDER};"
+                f"width:45%;'>Supporting evidence from the source</th>"
+                f"</tr>"
+                f"</thead>"
+                f"<tbody>{rows_html}</tbody>"
+                f"</table></div>",
+                unsafe_allow_html=True,
+            )
+ 
+        # for sig in group_sigs:
+        #     _render_single_signal(sig, level, tax, tc, doc_type)
 
 
 
@@ -4622,6 +5535,7 @@ def render_pdf_analysis_panel(
             "_pdf_edit_hist",
             "_pdf_edit_mode_fields",
             "_pdf_delete_confirm",
+            "_deleted_fields_list", 
         ):
             st.session_state.pop(_stale_key, None)
         for _k in list(st.session_state.keys()):

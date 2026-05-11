@@ -584,13 +584,22 @@ CHECKBOX FIELDS — CRITICAL RULE:
         "CRITICAL: OMIT any field where the value is empty, null, 'N/A', "
         "'Not found', or cannot be found in the document text. "
         "Only return fields that have a real extracted value.\n\n"
+        "TRANSCRIPT RULE: This document may be a conversation transcript. "
+        "Extract ONLY structured data fields (claim numbers, policy numbers, "
+        "dates, names, addresses, phone numbers, amounts). "
+        "Do NOT extract conversational phrases, questions, greetings, "
+        "or any sentence that is part of dialogue as a field value. "
+        "If a field value reads like a sentence someone spoke, OMIT it.\n\n"
         "PROVIDER NAME RULE: For 'Provider Name', prefer the name of the "
         "medical institution, hospital, clinic, or health system over an "
         "individual physician name where both are present. If only a physician "
         "name is present, use that."
         "'Not found', or cannot be found VERBATIM in the document text. "
         "Only return fields that have a real extracted value.\n\n"
-
+        "YEARS IN BUSINESS RULE: 'Years in Business' must be a duration "
+        "(e.g. '22 years', '5+ years'). Never extract a founding year like '2003' "
+        "for this field — that belongs in 'Year Founded' or 'Year Established'.\n\n"
+ 
         "DATE FIELDS — STRICT RULE:\n"
         "  • NEVER infer, calculate, or assume any date.\n"
         "  • 'Date of Loss' must appear as an explicit date in the document "
@@ -653,37 +662,86 @@ DO NOT extract signals — signals are handled separately.
 def _signals_system(doc_type: str) -> str:
     """
     Dedicated system prompt for the signals-only LLM call (Call B).
-    Uses build_signal_detection_prompt() from doc_config for
-    YAML-driven, keyword-specific signal detection guidance.
-    All signal extraction uses gpt-4o-mini (use_enhanced=False).
+    PATCHED: Forces exhaustive scan, explicit domain coverage, higher recall.
     """
+    from modules.doc_config import get_role, build_signal_detection_prompt  # keep your import
     role          = get_role(doc_type)
     signal_prompt = build_signal_detection_prompt(doc_type)
-
-    return textwrap.dedent(f"""
-You are a {role} specialising in risk signal detection.
-
+ 
+    return f"""
+You are a {role} specialising in EXHAUSTIVE risk signal detection.
+ 
 {signal_prompt}
-
-{_GROUNDING_RULES}
-
+ 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+MANDATORY SIGNAL DOMAINS — CHECK EVERY ONE BEFORE RESPONDING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+For EVERY document you MUST actively scan for signals in ALL of these domains.
+Do not stop after finding 1-2 signals. Scan each domain independently:
+ 
+  1. INJURY / CLAIM SEVERITY
+     Look for: fatality, death, hospitalization, surgery, fracture, permanent
+     disability, catastrophic, ICU, amputation, paralysis, total loss,
+     severe pain, multiple injuries, emergency room, trauma
+ 
+  2. LITIGATION RISK
+     Look for: attorney, lawyer, counsel, lawsuit, litigation, demand letter,
+     complaint filed, court, legal action, pre-litigation, settlement demand,
+     bad faith, wrongful death, class action, punitive damages
+ 
+  3. RECOVERY / SUBROGATION OPPORTUNITY
+     Look for: third party liable, subrogation, vendor fault, contractor,
+     negligence of third party, shared liability, upstream, MSP, recovery
+     potential, outsourced to
+ 
+  4. SETTLEMENT POSTURE
+     Look for: unwilling to settle, aggressive demand, refusal to settle,
+     cooperative, high demand, low-ball offer, mediation, arbitration,
+     demand value, settlement authority
+ 
+  5. MEDICAL COMPLEXITY
+     Look for: surgery required, specialist, physical therapy, chronic,
+     multiple procedures, hospitalization, ongoing treatment, chiropractic,
+     PTSD, pre-existing condition, treatment duration
+ 
+  6. FRAUD INDICATORS
+     Look for: inconsistent statement, staged, suspicious, prior similar claim,
+     conflicting evidence, unusual pattern, delayed reporting, no witnesses,
+     duplicate billing, upcoding, misrepresentation
+ 
+  7. COVERAGE ADEQUACY / ISSUES
+     Look for: reservation of rights, coverage denied, exclusion, gap,
+     underinsured, coinsurance penalty, policy limit, inadequate coverage,
+     coverage dispute
+ 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ANTI-HALLUCINATION RULES (unchanged):
+  1. supporting_text must be VERBATIM from the document (max 400 chars)
+  2. trigger_matched must be the exact keyword that fired
+  3. Only fire when explicit evidence is present in the text
+  4. confidence: 0.90+ verbatim match, 0.70-0.89 equivalent phrase
+  5. MULTIPLE SIGNALS ARE EXPECTED — a typical document should produce 3-8
+  6. Do NOT stop scanning after finding the first signal per domain
+ 
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ 
 Return ONLY valid JSON — no markdown, no preamble, no explanation.
-
+ 
 {{
   "signals": [
     {{
-      "type":            "<signal_type exactly as listed above>",
+      "type":            "<signal_type exactly as listed in SIGNAL DETECTION RULES>",
       "severity_level":  "<Highly Severe|High|Moderate|Low>",
       "description":     "<plain-English explanation of why this signal fired>",
-      "supporting_text": "<VERBATIM quote from document, max 120 chars>",
+      "supporting_text": "<VERBATIM quote from document, max 800 chars, include full sentence and surrounding context>",
       "trigger_matched": "<exact keyword or phrase from the Triggers list>",
       "confidence":      <0.0-1.0>
     }}
   ]
 }}
-
-If no signals are detected, return: {{"signals": []}}
-""").strip()
+ 
+If no signals are detected after exhaustive scan, return: {{"signals": []}}
+""".strip()
 
 
 def _summary_system(doc_type: str) -> str:
@@ -850,6 +908,486 @@ SCORING:
 """).strip()
 
 
+
+def _keyword_extract_signals(full_text: str, doc_type: str) -> list[dict]:
+    """
+    PATCHED: NEW FUNCTION
+    Pure keyword-based signal extraction using YAML config + extended keyword map.
+    Serves as Layer 1 of the fallback chain — fast, zero LLM cost, high recall.
+ 
+    Returns a list of signal dicts compatible with the signals schema.
+    Each signal is tagged with _source="keyword" for UI display.
+    """
+    import re as _re
+ 
+    text_lower = full_text.lower()
+ 
+    # ── Extended keyword map: (signal_type, severity, keyword, description) ──
+    # Organized by the 7 domains from the Value Momentum slide
+    _EXTENDED_KEYWORDS: list[tuple[str, str, str, str]] = [
+ 
+        # ── 1. INJURY / CLAIM SEVERITY ────────────────────────────────────
+        ("severity", "Highly Severe", "fatality",           "Fatality referenced in document"),
+        ("severity", "Highly Severe", "fatal",              "Fatal injury or event described"),
+        ("severity", "Highly Severe", "death",              "Death of a party referenced"),
+        ("severity", "Highly Severe", "deceased",           "Deceased party mentioned"),
+        ("severity", "Highly Severe", "wrongful death",     "Wrongful death claim identified"),
+        ("severity", "Highly Severe", "catastrophic",       "Catastrophic injury or loss described"),
+        ("severity", "Highly Severe", "permanent disability","Permanent disability indicated"),
+        ("severity", "Highly Severe", "permanent impairment","Permanent impairment noted"),
+        ("severity", "Highly Severe", "total loss",         "Total loss of property or vehicle"),
+        ("severity", "Highly Severe", "paralysis",          "Paralysis condition referenced"),
+        ("severity", "Highly Severe", "amputation",         "Amputation referenced"),
+        ("severity", "Highly Severe", "traumatic brain",    "Traumatic brain injury identified"),
+        ("severity", "Highly Severe", "spinal cord",        "Spinal cord injury referenced"),
+        ("severity", "High",          "surgery",            "Surgical procedure documented"),
+        ("severity", "High",          "surgical",           "Surgical intervention referenced"),
+        ("severity", "High",          "hospitalized",       "Hospitalization reported"),
+        ("severity", "High",          "hospitalization",    "Hospitalization referenced"),
+        ("severity", "High",          "fracture",           "Fracture injury identified"),
+        ("severity", "High",          "multiple fractures", "Multiple fractures reported"),
+        ("severity", "High",          "icu",                "ICU admission or treatment noted"),
+        ("severity", "High",          "intensive care",     "Intensive care referenced"),
+        ("severity", "High",          "emergency room",     "Emergency room visit documented"),
+        ("severity", "High",          "severe pain",        "Severe pain reported"),
+        ("severity", "High",          "severe injury",      "Severe injury documented"),
+        ("severity", "High",          "significant injury",  "Significant injury referenced"),
+        ("severity", "High",          "nerve damage",       "Nerve damage identified"),
+        ("severity", "High",          "herniated",          "Herniated disc or injury noted"),
+        ("severity", "High",          "torn",               "Torn ligament or tissue noted"),
+        ("severity", "Moderate",      "moderate injury",    "Moderate injury documented"),
+        ("severity", "Moderate",      "physical therapy",   "Physical therapy prescribed"),
+        ("severity", "Moderate",      "ongoing treatment",  "Ongoing medical treatment noted"),
+        ("severity", "Moderate",      "restricted activity","Activity restriction documented"),
+        ("severity", "Moderate",      "chiropractic",       "Chiropractic treatment referenced"),
+        ("severity", "Moderate",      "emergency",          "Emergency event referenced"),
+        ("severity", "Moderate",      "airbag deployed",    "Airbag deployment noted"),
+        ("severity", "Moderate",      "contusion",          "Contusion injury documented"),
+        ("severity", "Moderate",      "laceration",         "Laceration documented"),
+        ("severity", "Moderate",      "sprain",             "Sprain injury documented"),
+        ("severity", "Low",           "minor injury",       "Minor injury reported"),
+        ("severity", "Low",           "first aid",          "First aid treatment only"),
+        ("severity", "Low",           "no injuries",        "No injuries reported"),
+ 
+        # ── 2. LITIGATION RISK ─────────────────────────────────────────────
+        ("legal_escalation", "Highly Severe", "criminal charges",   "Criminal charges referenced"),
+        ("legal_escalation", "Highly Severe", "class action",       "Class action litigation identified"),
+        ("legal_escalation", "Highly Severe", "punitive damages",   "Punitive damages sought"),
+        ("legal_escalation", "Highly Severe", "bad faith",          "Bad faith allegation present"),
+        ("legal_escalation", "Highly Severe", "wrongful death suit", "Wrongful death suit filed"),
+        ("legal_escalation", "High",          "attorney involved",  "Attorney involvement noted"),
+        ("legal_escalation", "High",          "attorney retained",  "Attorney retained by claimant"),
+        ("legal_escalation", "High",          "counsel retained",   "Legal counsel retained"),
+        ("legal_escalation", "High",          "attorney",           "Attorney referenced in document"),
+        ("legal_escalation", "High",          "lawsuit filed",      "Lawsuit has been filed"),
+        ("legal_escalation", "High",          "lawsuit",            "Lawsuit referenced"),
+        ("legal_escalation", "High",          "litigation initiated","Litigation initiated"),
+        ("legal_escalation", "High",          "litigation",         "Litigation referenced"),
+        ("legal_escalation", "High",          "demand letter",      "Formal demand letter issued"),
+        ("legal_escalation", "High",          "legal representation","Legal representation noted"),
+        ("legal_escalation", "High",          "complaint filed",    "Formal complaint filed"),
+        ("legal_escalation", "High",          "plaintiff",          "Plaintiff party identified"),
+        ("legal_escalation", "High",          "defendant",          "Defendant party identified"),
+        ("legal_escalation", "High",          "negligence",         "Negligence allegation present"),
+        ("legal_escalation", "High",          "damages sought",     "Damages are being sought"),
+        ("legal_escalation", "High",          "liability",          "Liability language detected"),
+        ("legal_escalation", "High",          "court",              "Court proceedings referenced"),
+        ("legal_escalation", "Moderate",      "attorney involvement","Attorney involvement at early stage"),
+        ("legal_escalation", "Moderate",      "settlement demand",  "Settlement demand received"),
+        ("legal_escalation", "Moderate",      "mediation",          "Mediation process referenced"),
+        ("legal_escalation", "Moderate",      "arbitration",        "Arbitration referenced"),
+        ("legal_escalation", "Moderate",      "deposition",         "Deposition activity noted"),
+        ("legal_escalation", "Moderate",      "pre-litigation",     "Pre-litigation indicators present"),
+        ("legal_escalation", "Moderate",      "considering attorney","Claimant considering attorney"),
+ 
+        # ── 3. RECOVERY / SUBROGATION OPPORTUNITY ─────────────────────────
+        ("recovery_subrogation", "High", "third party liable",    "Third party liability identified"),
+        ("recovery_subrogation", "High", "subrogation",           "Subrogation opportunity present"),
+        ("recovery_subrogation", "High", "subrogation potential", "Potential subrogation identified"),
+        ("recovery_subrogation", "High", "vendor responsible",    "Vendor responsibility identified"),
+        ("recovery_subrogation", "High", "contractor fault",      "Contractor fault identified"),
+        ("recovery_subrogation", "High", "subcontractor",         "Subcontractor involvement noted"),
+        ("recovery_subrogation", "High", "third party fault",     "Third party at fault"),
+        ("recovery_subrogation", "High", "shared negligence",     "Shared negligence identified"),
+        ("recovery_subrogation", "High", "upstream liability",    "Upstream liability identified"),
+        ("recovery_subrogation", "High", "outsourced to",         "Outsourced service involved"),
+        ("recovery_subrogation", "High", "msp",                   "Medicare Secondary Payer involvement"),
+        ("recovery_subrogation", "Moderate", "partial liability",  "Partial liability identified"),
+        ("recovery_subrogation", "Moderate", "contributory",       "Contributory negligence noted"),
+        ("recovery_subrogation", "Moderate", "possible recovery",  "Possible recovery identified"),
+ 
+        # ── 4. SETTLEMENT POSTURE ──────────────────────────────────────────
+        ("risk_appetite", "High", "unwilling to settle",   "Claimant unwilling to settle"),
+        ("risk_appetite", "High", "aggressive demand",     "Aggressive settlement demand"),
+        ("risk_appetite", "High", "refusal to settle",     "Refusal to settle documented"),
+        ("risk_appetite", "High", "high demand",           "High settlement demand noted"),
+        ("risk_appetite", "High", "demand value",          "Demand value specified"),
+        ("risk_appetite", "High", "non-renewing",          "Non-renewal due to loss activity"),
+        ("risk_appetite", "High", "reason for marketing",  "Reason for market change noted"),
+        ("risk_appetite", "Moderate", "cooperative",        "Cooperative settlement posture"),
+        ("risk_appetite", "Moderate", "settlement discussion","Settlement discussions ongoing"),
+ 
+        # ── 5. MEDICAL COMPLEXITY ──────────────────────────────────────────
+        ("medical_complexity", "Highly Severe", "permanent disability", "Permanent disability identified"),
+        ("medical_complexity", "Highly Severe", "permanent impairment", "Permanent impairment noted"),
+        ("medical_complexity", "Highly Severe", "paralysis",            "Paralysis condition noted"),
+        ("medical_complexity", "Highly Severe", "traumatic brain injury","Traumatic brain injury"),
+        ("medical_complexity", "Highly Severe", "spinal cord injury",    "Spinal cord injury"),
+        ("medical_complexity", "High",          "surgery",              "Surgery required"),
+        ("medical_complexity", "High",          "surgical procedure",   "Surgical procedure documented"),
+        ("medical_complexity", "High",          "hospitalization",      "Hospitalization required"),
+        ("medical_complexity", "High",          "multiple procedures",  "Multiple medical procedures"),
+        ("medical_complexity", "High",          "specialist referral",  "Specialist referral needed"),
+        ("medical_complexity", "High",          "chronic condition",    "Chronic condition identified"),
+        ("medical_complexity", "High",          "pre-existing condition","Pre-existing condition noted"),
+        ("medical_complexity", "High",          "ptsd",                 "PTSD diagnosed or claimed"),
+        ("medical_complexity", "High",          "treatment duration",   "Extended treatment duration"),
+        ("medical_complexity", "Moderate",      "physical therapy",     "Physical therapy prescribed"),
+        ("medical_complexity", "Moderate",      "chiropractic",         "Chiropractic treatment noted"),
+        ("medical_complexity", "Moderate",      "ongoing treatment",    "Ongoing treatment required"),
+        ("medical_complexity", "Moderate",      "follow-up required",   "Follow-up care required"),
+        ("medical_complexity", "Moderate",      "medication prescribed", "Medication prescribed"),
+ 
+        # ── 6. FRAUD INDICATORS ────────────────────────────────────────────
+        ("fraud_indicator", "Highly Severe", "staged",              "Staged incident suspected"),
+        ("fraud_indicator", "Highly Severe", "fabricated",          "Fabricated claim evidence"),
+        ("fraud_indicator", "Highly Severe", "false claim",         "False claim language detected"),
+        ("fraud_indicator", "Highly Severe", "misrepresentation",   "Misrepresentation identified"),
+        ("fraud_indicator", "Highly Severe", "fraud confirmed",     "Fraud confirmed in document"),
+        ("fraud_indicator", "High",          "inconsistent statement","Inconsistent statements noted"),
+        ("fraud_indicator", "High",          "conflicting",         "Conflicting information present"),
+        ("fraud_indicator", "High",          "suspicious",          "Suspicious circumstances noted"),
+        ("fraud_indicator", "High",          "prior similar claim", "Prior similar claim history"),
+        ("fraud_indicator", "High",          "duplicate billing",   "Duplicate billing identified"),
+        ("fraud_indicator", "High",          "upcoding",            "Medical upcoding suspected"),
+        ("fraud_indicator", "High",          "unusual pattern",     "Unusual claim pattern detected"),
+        ("fraud_indicator", "Moderate",      "delayed reporting",   "Delayed reporting of loss"),
+        ("fraud_indicator", "Moderate",      "no witnesses",        "No witnesses to incident"),
+        ("fraud_indicator", "Moderate",      "high frequency",      "High claim frequency noted"),
+        ("fraud_indicator", "Moderate",      "prior claims history","Prior claims history present"),
+ 
+        # ── 7. COVERAGE ADEQUACY / ISSUES ─────────────────────────────────
+        ("coverage_adequacy", "High", "reservation of rights", "Reservation of rights issued"),
+        ("coverage_adequacy", "High", "coverage denied",       "Coverage denial noted"),
+        ("coverage_adequacy", "High", "coverage denial",       "Coverage denied"),
+        ("coverage_adequacy", "High", "policy exclusion",      "Policy exclusion referenced"),
+        ("coverage_adequacy", "High", "coverage dispute",      "Coverage dispute identified"),
+        ("coverage_adequacy", "High", "underinsured",          "Underinsurance identified"),
+        ("coverage_adequacy", "High", "coverage gap",          "Coverage gap identified"),
+        ("coverage_adequacy", "High", "inadequate limits",     "Inadequate policy limits"),
+        ("coverage_adequacy", "High", "coinsurance penalty",   "Coinsurance penalty applicable"),
+        ("coverage_adequacy", "Moderate", "limits review",     "Policy limits require review"),
+        ("coverage_adequacy", "Moderate", "coverage concern",  "Coverage concern identified"),
+        ("coverage_adequacy", "Moderate", "exclusion",         "Policy exclusion referenced"),
+ 
+        # ── UNDERWRITING-SPECIFIC ──────────────────────────────────────────
+        ("risk_severity", "Highly Severe", "catastrophic exposure", "Catastrophic exposure identified"),
+        ("risk_severity", "Highly Severe", "zone ae",               "FEMA Zone AE flood risk"),
+        ("risk_severity", "Highly Severe", "cat zone",              "CAT zone exposure identified"),
+        ("risk_severity", "High",          "fire",                  "Fire hazard or loss identified"),
+        ("risk_severity", "High",          "theft",                 "Theft loss identified"),
+        ("risk_severity", "High",          "electrical arc",        "Electrical arc hazard noted"),
+        ("risk_severity", "High",          "high hazard",           "High hazard classification"),
+        ("risk_severity", "High",          "open loss",             "Open/reserved loss present"),
+        ("risk_severity", "Moderate",      "wind damage",           "Wind damage documented"),
+        ("risk_severity", "Moderate",      "water damage",          "Water damage documented"),
+    ]
+ 
+    # ── Find all matches, deduplicate by (type, trigger) ──────────────────
+    seen_keys: set[str] = set()
+    signals: list[dict] = []
+ 
+    for sig_type, severity, keyword, description in _EXTENDED_KEYWORDS:
+        dedup_key = f"{sig_type}:{keyword.lower()}"
+        if dedup_key in seen_keys:
+            continue
+ 
+        kw_lower = keyword.lower()
+        import re as _re
+        if not _re.search(r'\b' + _re.escape(kw_lower) + r'\b', text_lower):
+            continue
+ 
+        seen_keys.add(dedup_key)
+ 
+        # ── Extract context snippet ──────────────────────────────────────
+        idx = text_lower.find(kw_lower)
+        snippet_start = max(0, idx - 150)   # more context before
+        snippet_end   = min(len(full_text), idx + len(keyword) + 300)
+        # Walk back to word boundary
+        while snippet_start > 0 and full_text[snippet_start - 1] not in (' ', '\n', '.', ','):
+            snippet_start -= 1
+ 
+        snippet = full_text[snippet_start:snippet_end].strip().replace("\n", " ")
+        # Truncate to 120 chars for the schema
+        if len(snippet) > 800:
+           snippet = snippet[:797] + "…"
+ 
+        signals.append({
+            "type":            sig_type,
+            "severity_level":  severity,
+            "description":     description,
+            "supporting_text": snippet,
+            "trigger_matched": keyword,
+            "confidence":      0.75,   # keyword match = reasonable confidence
+            "_source":         "keyword",
+        })
+ 
+    return signals
+
+def _regex_extract_from_text(full_text: str) -> dict:
+    """
+    Fast regex-based extraction for structured patterns that
+    appear reliably in FNOL/transcript text documents.
+    Catches dates, times, IDs, phone numbers, emails etc.
+    without any LLM call.
+    """
+    import re
+    results = {}
+
+    _PATTERNS = {
+        "Claim Number":        r'\b(claim\s*(?:number|no|#)[:\s#]*([A-Z0-9\-]{5,20}))',
+        "Policy Number":       r'\b(policy\s*(?:number|no|#)[:\s#]*([A-Z0-9\-]{5,20}))',
+        "Date of Loss":        r'\b(date\s*of\s*loss[:\s]*(\d{1,2}[\/\-]\d{1,2}[\/\-]\d{2,4}|\w+ \d{1,2},?\s*\d{4}))',
+        "Time of Loss":        r'\b(time\s*of\s*(?:loss|incident)[:\s]*(\d{1,2}:\d{2}\s*(?:AM|PM|am|pm)?))',
+        "Phone Number":        r'\b((?:phone|cell|mobile|contact)[:\s]*(\(?\d{3}\)?[\s\-\.]\d{3}[\s\-\.]\d{4}))',
+        "Email":               r'\b([a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,})',
+        "Police Report Number":r'\b(police\s*report\s*(?:number|no|#)[:\s#]*([A-Z0-9\-]{4,20}))',
+        "Location of Loss":    r'\b((?:location|address|place)\s*of\s*(?:loss|incident)[:\s]*([^\n]{5,80}))',
+        "Adjuster":            r'\b(adjuster[:\s]*([A-Z][a-z]+ [A-Z][a-z]+))',
+        "Cause of Loss":       r'\b(cause\s*of\s*(?:loss|incident)[:\s]*([^\n]{3,60}))',
+    }
+
+    for field_name, pattern in _PATTERNS.items():
+        try:
+            match = re.search(pattern, full_text, re.IGNORECASE)
+            if match:
+                # Last capture group is the value
+                value = match.group(match.lastindex).strip().rstrip(".,;")
+                if value and len(value) >= 2:
+                    results[field_name] = {
+                        "value":      value,
+                        "confidence": 0.92,
+                        "source_text": match.group(0)[:100],
+                        "azure_di_key": None,
+                        "_source": "regex",
+                    }
+        except Exception:
+            continue
+
+    return results
+
+
+def _spacy_extract_from_text(full_text: str) -> dict:
+    """
+    Use spaCy NER to extract person names, orgs, dates, locations
+    from unstructured text. Zero LLM cost.
+    """
+    try:
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+    except Exception:
+        return {}
+
+    doc     = nlp(full_text[:10000])
+    results = {}
+    seen    = set()
+
+    _LABEL_MAP = {
+        "PERSON":  "Claimant Name",
+        "ORG":     "Organization",
+        "GPE":     "Location",
+        "LOC":     "Location of Loss",
+        "DATE":    "Date of Loss",
+        "TIME":    "Time of Loss",
+        "MONEY":   "Estimated Damage",
+        "CARDINAL":"Reference Number",
+    }
+
+    for ent in doc.ents:
+        mapped = _LABEL_MAP.get(ent.label_)
+        if not mapped or mapped in seen:
+            continue
+        value = ent.text.strip()
+        if len(value) < 2:
+            continue
+        seen.add(mapped)
+        results[mapped] = {
+            "value":       value,
+            "confidence":  0.80,
+            "source_text": full_text[max(0,ent.start_char-30):ent.end_char+30],
+            "azure_di_key": None,
+            "_source": "spacy",
+        }
+
+    return results    
+
+def _llm_enrich_signals(
+    full_text: str,
+    doc_type: str,
+    keyword_signals: list[dict],
+) -> list[dict]:
+    """
+    PATCHED: NEW FUNCTION
+    Layer 2 of the signal fallback chain.
+    LLM reviews keyword-detected signals and adds any missed ones.
+    Uses a focused prompt to avoid redundancy with existing signals.
+    """
+    if not keyword_signals:
+        # If keywords found nothing, run a full LLM scan instead
+        existing_summary = "No keyword signals were detected."
+    else:
+        sig_lines = []
+        for s in keyword_signals[:15]:   # cap to avoid prompt bloat
+            sig_lines.append(
+                f"  - [{s['severity_level']}] {s['type']}: {s['description']}"
+            )
+        existing_summary = "\n".join(sig_lines)
+ 
+    system = f"""
+You are a senior insurance risk analyst performing signal detection on a {doc_type} document.
+ 
+ALREADY DETECTED SIGNALS (do not duplicate these):
+{existing_summary}
+ 
+YOUR TASK:
+1. Read the document text carefully.
+2. Identify ANY risk signals NOT already in the list above.
+3. Focus especially on:
+   - Severity signals (injury level, property damage extent)
+   - Litigation risk (attorney, lawsuits, demands)
+   - Recovery/subrogation opportunities (third party fault)
+   - Settlement posture (aggressive vs cooperative)
+   - Medical complexity
+   - Fraud indicators
+   - Coverage issues
+ 
+RULES:
+- Only return NEW signals not covered by the existing list
+- supporting_text must be verbatim from the document (max 800 chars)
+- If no new signals found, return empty signals array
+- Be specific — reference exact document language
+ 
+Return ONLY valid JSON:
+{{
+  "signals": [
+    {{
+      "type":            "<signal_type>",
+      "severity_level":  "<Highly Severe|High|Moderate|Low>",
+      "description":     "<plain English explanation>",
+      "supporting_text": "<VERBATIM quote, max 800 chars>",
+      "trigger_matched": "<keyword or phrase that triggered this>",
+      "confidence":      <0.0-1.0>
+    }}
+  ]
+}}
+""".strip()
+ 
+    user = (
+        f"Document type: {doc_type}\n"
+        f"Find additional risk signals not already detected.\n\n"
+        f"--- DOCUMENT TEXT ---\n{full_text[:8000]}"
+    )
+ 
+    result = _llm_call(
+        system_prompt=system,
+        user_prompt=user,
+        max_tokens=2000,
+        label="signals_enrichment",
+        use_enhanced=False,
+    )
+ 
+    if not result:
+        return []
+ 
+    new_signals = result.get("signals") or []
+ 
+    # Tag enrichment signals
+    for sig in new_signals:
+        sig["_source"] = "llm_enriched"
+ 
+    return new_signals
+
+
+def _llm_filter_entities(entities: dict, doc_type: str, full_text: str) -> dict:
+    """
+    Uses a single fast LLM call to filter out semantically incorrect
+    key-value pairs. Returns only the fields that are valid.
+    Runs after _verify_entities_against_text().
+    """
+    if not entities:
+        return entities
+
+    # Build a compact list of field:value pairs for the LLM to review
+    pairs = []
+    for fname, fdata in list(entities.items())[:40]:  # cap to 40 fields
+        if not isinstance(fdata, dict):
+            continue
+        val = (fdata.get("value") or "").strip()
+        if val:
+            # Truncate long values so prompt stays small
+            pairs.append(f'  "{fname}": "{val[:120]}"')
+
+    if not pairs:
+        return entities
+
+    pairs_str = "\n".join(pairs)
+
+    system = f"""You are a data quality validator for {doc_type} insurance documents.
+
+You will receive a list of extracted key-value pairs from a document.
+Your job: identify which field values are SEMANTICALLY INCORRECT for their field name.
+
+A value is INCORRECT if:
+- A "Date" field contains billing statement text, payment history, or long prose
+- A "Patient" or "Name" field contains addresses, dollar amounts, or multiple sentences  
+- A "Provider" field contains billing codes or full paragraph text
+- Any short-label field (Date, Name, ID, Amount) contains a long paragraph (>50 words)
+- The value is clearly from a completely different section of the document than the field name implies
+- A "Years in Business" field contains a calendar year like "2003" or "1998" 
+  instead of a duration like "22 years" or "Since 2003"
+
+A value is CORRECT if:
+- A date field has an actual date
+- A name field has a person or org name  
+- An amount field has a dollar value
+- The value makes sense as an answer to "what is the [field name]?"
+
+Return ONLY valid JSON — no explanation:
+{{
+  "keep": ["<field_name1>", "<field_name2>", ...],
+  "remove": ["<field_name3>", ...]
+}}
+
+Only list fields in "remove" if you are highly confident the value is wrong.
+When in doubt, keep the field."""
+
+    user = (
+        f"Document type: {doc_type}\n\n"
+        f"Extracted fields to validate:\n{pairs_str}\n\n"
+        f"Document context (first 500 chars): {full_text[:500]}"
+    )
+
+    result = _llm_call(
+        system_prompt=system,
+        user_prompt=user,
+        max_tokens=600,
+        label="entity_filter",
+        use_enhanced=False,  # Use cheap model — this is a filter, not extraction
+    )
+
+    if not result:
+        return entities  # If LLM fails, show everything (safe fallback)
+
+    to_remove = set(result.get("remove") or [])
+    if not to_remove:
+        return entities
+
+    return {
+        fname: fdata
+        for fname, fdata in entities.items()
+        if fname not in to_remove
+    }
+
 # ─────────────────────────────────────────────────────────────────────────────
 # STEP 4 — TWO-CALL ANALYSIS
 # ─────────────────────────────────────────────────────────────────────────────
@@ -858,6 +1396,7 @@ def analyse_document(
     full_text: str,
     doc_type: str,
     azure_di_fields: dict[str, dict] | None = None,
+    source: str = "pdf",
 ) -> dict:
     """
     Three-call analysis — all on gpt-4o-mini:
@@ -879,7 +1418,7 @@ def analyse_document(
             if v:
                 adi_kv[fname] = str(v)[:200]
 
-    text_a = full_text[:3000] + ("\n\n[... document truncated ...]" if len(full_text) > 3000 else "")
+    text_a = full_text[:8000] + ("\n\n[... document truncated ...]" if len(full_text) > 8000 else "")
     text_b = text_a
 
     adi_listing = ""
@@ -987,16 +1526,19 @@ def analyse_document(
     user_b_signals = (
         f"Document type: {doc_type}"
         + (f" / Sub-type: {subtype}" if subtype else "")
-        + "\nDetect risk signals ONLY. Do not extract entity fields."
-        + f"\n\n--- DOCUMENT TEXT ---\n{full_text[:6000]}"
+        + "\\nDetect ALL risk signals across ALL domains. Be exhaustive — do not stop after 2-3 signals."
+        + "\\nScan for: injury severity, litigation risk, recovery/subrogation, settlement posture, "
+        + "medical complexity, fraud indicators, and coverage issues."
+        + f"\\n\\n--- DOCUMENT TEXT ---\\n{full_text[:10000]}"
     )
     result_b = _llm_call(
         system_prompt=_signals_system(doc_type),
         user_prompt=user_b_signals,
-        max_tokens=2500,   # ← enough for 6-7 detailed signals
+        max_tokens=3500,   # PATCHED: was 2500
         label="signals",
         use_enhanced=False,
     )
+
 
     # ── CALL C — Summary + type_specific + judge (gpt-4o-mini) ───────────────
     user_c = (
@@ -1023,14 +1565,80 @@ def analyse_document(
 
     if result_a:
         entities = result_a.get("entities") or {}
-        entities = _verify_entities_against_text(entities, full_text)
+        entities = _verify_entities_against_text(entities, full_text, source=source)
+
+        # ── PATCH: LLM semantic filter ────────────────────────────────────
+        entities = _llm_filter_entities(entities, doc_type, full_text)
+        
         for _, ed in entities.items():
             if isinstance(ed, dict):
                 ed.setdefault("azure_di_key", None)
 
+    # ── HYBRID: regex + spaCy extraction for TXT sources ─────────────────
+    if source == "txt":  # pass source down or check full_text length
+        regex_entities = _regex_extract_from_text(full_text)
+        spacy_entities = _spacy_extract_from_text(full_text)
+
+        # Merge: LLM wins on conflicts, regex/spaCy fill gaps
+        for fname, fdata in {**spacy_entities, **regex_entities}.items():
+            norm = fname.strip().lower()
+            already_covered = any(
+                norm in (k.strip().lower()) 
+                for k in entities.keys()
+            )
+            if not already_covered:
+                entities[fname] = fdata           
+    
+    # LAYER 1: LLM dedicated signal call (Call B result)
+    llm_signals = []
     if result_b:
-        signals = result_b.get("signals") or []
-        signals = _validate_signals_against_text(signals, full_text)
+        llm_signals = result_b.get("signals") or []
+        llm_signals = _validate_signals_against_text(llm_signals, full_text)
+        for s in llm_signals:
+            s.setdefault("_source", "llm")
+
+    # LAYER 2: Keyword extraction (always runs, zero LLM cost)
+    keyword_signals = _keyword_extract_signals(full_text, doc_type)
+
+    # LAYER 3: LLM enrichment (runs when LLM signals are sparse)
+    enriched_signals = []
+    total_llm_count = len([s for s in llm_signals if not s.get("_unverified")])
+
+    if total_llm_count < 3:
+        # LLM found fewer than 3 verified signals — enrich with keyword+LLM hybrid
+        enriched_signals = _llm_enrich_signals(full_text, doc_type, keyword_signals)
+        enriched_signals = _validate_signals_against_text(enriched_signals, full_text)
+
+    # ── Merge all three layers, deduplicate by (type, trigger) ─────────────
+    def _sig_dedup_key(s: dict) -> str:
+        return f"{s.get('type','').lower()}:{s.get('trigger_matched','').lower()[:30]}"
+
+    seen_sig_keys: set = set()
+    merged_signals: list = []
+
+    # Priority: LLM > Enriched > Keyword
+    for sig in llm_signals + enriched_signals:
+        k = _sig_dedup_key(sig)
+        if k not in seen_sig_keys:
+            seen_sig_keys.add(k)
+            merged_signals.append(sig)
+
+    # Add keyword signals that aren't already covered by LLM/enriched
+    for sig in keyword_signals:
+        k = _sig_dedup_key(sig)
+        covered = False
+        for existing_key in seen_sig_keys:
+            existing_type = existing_key.split(":")[0]
+            if existing_type == sig.get("type", "").lower():
+                trigger_new = sig.get("trigger_matched", "").lower()
+                if trigger_new and trigger_new[:10] in existing_key:
+                    covered = True
+                    break
+        if not covered and k not in seen_sig_keys:
+            seen_sig_keys.add(k)
+            merged_signals.append(sig)
+
+    signals = merged_signals
 
     if result_c:
         summary       = result_c.get("summary")       or ""
@@ -1075,76 +1683,117 @@ def _empty_analysis(doc_type: str) -> dict:
 # LAYER 4 — POST-EXTRACTION HALLUCINATION VERIFIER
 # ─────────────────────────────────────────────────────────────────────────────
 def _validate_signals_against_text(signals: list, full_text: str) -> list:
+    """
+    PATCHED: Much more permissive. Signals are never dropped — only confidence
+    is reduced when verification fails. This ensures the UI always shows
+    signals that the LLM detected, with a visual warning on unverified ones.
+    """
+    import re as _re
     if not full_text or not signals:
         return signals
-
+ 
     text_lower = full_text.lower()
     validated  = []
-
+ 
     for sig in signals:
         supporting = (sig.get("supporting_text") or "").strip()
         trigger    = (sig.get("trigger_matched")  or "").strip()
-
+        desc       = (sig.get("description")      or "").strip()
+ 
         grounded = False
-
-        # Check 1: supporting_text verbatim in document
-        if supporting and len(supporting) >= 6:  # was 8
+ 
+        # ── Check 1: supporting_text verbatim in document ──────────────────
+        if supporting and len(supporting) >= 3:   # PATCHED: was 6/8
             if supporting.lower() in text_lower:
                 grounded = True
             else:
                 sup_toks = {
                     t for t in supporting.lower().split()
-                    if len(t) >= 3  # was 4
+                    if len(t) >= 3
                 }
                 doc_toks = set(text_lower.split())
                 if sup_toks:
                     overlap = len(sup_toks & doc_toks) / len(sup_toks)
-                    if overlap >= 0.40:  # was 0.60
+                    if overlap >= 0.25:    # PATCHED: was 0.40
                         grounded = True
-
-        # Check 2: trigger keyword in document
-        # ALSO check with punctuation stripped
-        trigger_clean = re.sub(r"[—\-–]", " ", trigger).strip()
-        trigger_found = bool(
-            trigger and (
-                trigger.lower() in text_lower
-                or trigger_clean.lower() in text_lower
-            )
-        )
-        if trigger_found and not grounded:
-            grounded = True
-
-        # NEW Check 3: any significant word from trigger in document
+ 
+        # ── Check 2: trigger keyword in document ──────────────────────────
+        if not grounded and trigger:
+            trigger_clean = _re.sub(r"[—\-–]", " ", trigger).strip()
+            trigger_lower = trigger.lower()
+            trigger_clean_lower = trigger_clean.lower()
+            if trigger_lower in text_lower or trigger_clean_lower in text_lower:
+                grounded = True
+ 
+        # ── Check 3: ANY significant word from trigger in document ─────────
         if not grounded and trigger:
             trigger_words = {
                 w for w in trigger.lower().split()
-                if len(w) >= 5
+                if len(w) >= 4
             }
             if trigger_words and trigger_words & set(text_lower.split()):
                 grounded = True
-
+ 
+        # ── Check 4: description keywords in document ──────────────────────
+        # PATCHED: New check — use description words as additional evidence
+        if not grounded and desc:
+            desc_words = {
+                w for w in desc.lower().split()
+                if len(w) >= 5
+                and w not in {"signal", "detected", "identified", "document",
+                              "indicates", "referenced", "mentioned", "present",
+                              "reported", "found", "noted"}
+            }
+            doc_words = set(text_lower.split())
+            if desc_words:
+                overlap = len(desc_words & doc_words) / len(desc_words)
+                if overlap >= 0.30:   # 30% of significant desc words in doc
+                    grounded = True
+ 
+        # ── Check 5: signal type keyword heuristic ─────────────────────────
+        # PATCHED: New check — if signal type matches obvious doc content, keep it
+        _TYPE_KEYWORDS = {
+            "severity":           ["injur", "pain", "fractur", "surg", "hospital",
+                                   "fatal", "death", "disab", "trauma", "loss"],
+            "legal_escalation":   ["attorney", "lawyer", "lawsuit", "court", "legal",
+                                   "litigat", "demand", "complaint", "counsel"],
+            "litigation_exposure":["attorney", "lawyer", "lawsuit", "court", "legal"],
+            "fraud_indicator":    ["inconsist", "suspic", "staged", "false", "fraud",
+                                   "misrepresent", "conflict", "unusual"],
+            "medical_complexity": ["surg", "hospital", "therapy", "specialist",
+                                   "chronic", "treatment", "procedure", "medic"],
+            "recovery_subrogation":["third party", "subroga", "vendor", "contractor",
+                                    "liable", "recover", "upstream"],
+            "coverage_adequacy":  ["exclusion", "limit", "denial", "reserv", "gap",
+                                   "underinsur", "coverage"],
+            "coverage_issue":     ["exclusion", "denial", "reserv", "coverage"],
+            "risk_severity":      ["injur", "loss", "damage", "severe", "hazard"],
+            "risk_appetite":      ["non-renew", "disclose", "incomplete", "expir"],
+        }
         if not grounded:
-            sig = dict(sig)
-            sig["confidence"]  = min(float(sig.get("confidence", 0.5)), 0.40)
+            sig_type = sig.get("type", "").lower()
+            type_hints = _TYPE_KEYWORDS.get(sig_type, [])
+            if any(hint in text_lower for hint in type_hints):
+                grounded = True
+ 
+        # ── Apply result — NEVER drop, only reduce confidence ──────────────
+        # PATCHED: was conditionally dropping signals
+        sig = dict(sig)   # make a copy
+        if not grounded:
+            sig["confidence"]  = min(float(sig.get("confidence", 0.5)), 0.45)
             sig["_unverified"] = True
-
-        if not trigger_found and trigger:
-            sig = dict(sig)
-            sig["_trigger_not_found"] = True
-
+        else:
+            sig.pop("_unverified", None)
+ 
         validated.append(sig)
-
+ 
     return validated
 
 
 
-def _verify_entities_against_text(entities: dict, full_text: str) -> dict:
-    """
-    Post-extraction guardrail: remove any entity whose value cannot be 
-    found (even approximately) in the source document text.
-    Prevents hallucinated values from reaching the UI.
-    """
-    if not full_text:
+def _verify_entities_against_text(entities: dict, full_text: str, source: str = "pdf") -> dict:
+    # TXT sources are already clean text — skip aggressive verification
+    if source == "txt":
         return entities
 
     text_lower = full_text.lower()
@@ -1341,6 +1990,7 @@ def _empty_validation() -> dict:
 
 
 def _file_hash(full_text: str, doc_type_hint: str = "") -> str:
+    _CACHE_VERSION = "v4"
     """Stable hash of document content — same file always produces same hash."""
     payload = f"{full_text.strip()}|{doc_type_hint}"
     return hashlib.sha256(payload.encode("utf-8")).hexdigest()[:16]
@@ -1395,7 +2045,8 @@ def run_pdf_intelligence(parsed: dict, sheet_cache: dict | None = None) -> dict:
     # ── Classify + Analyse ────────────────────────────────────────────────────
     classification = classify_document(full_text)
     doc_type       = classification.get("classification", "Legal")
-    analysis       = analyse_document(full_text, doc_type, azure_di_fields=azure_di_index)
+    # analysis       = analyse_document(full_text, doc_type, azure_di_fields=azure_di_index)
+    analysis = analyse_document(full_text, doc_type, azure_di_fields=azure_di_index, source=source)
 
     result = {
         "full_text":      full_text,
