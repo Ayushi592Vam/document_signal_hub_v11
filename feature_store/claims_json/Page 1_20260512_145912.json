@@ -1,0 +1,196 @@
+{
+  "records": {
+    "1": {
+      "UNITED STATES DISTRICT COURT": {
+        "value": "Northern District of Illinois - Eastern Division",
+        "modified": "Northern District of Illinois - Eastern Division",
+        "original": "Northern District of Illinois - Eastern Division",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "UNITED STATES DISTRICT COURT: Northern District of Illinois - Eastern Division",
+        "bounding_polygon": [
+          [
+            0.6499999894036187,
+            0.12881946563720703
+          ],
+          [
+            2.8491181267632375,
+            0.12881946563720703
+          ],
+          [
+            2.8491181267632375,
+            0.3105069796244303
+          ],
+          [
+            0.6499999894036187,
+            0.3105069796244303
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.95,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Page 1 | Case No. 1": {
+        "value": "25-cv-01874",
+        "modified": "25-cv-01874",
+        "original": "25-cv-01874",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Page 1 | Case No. 1: 25-cv-01874",
+        "bounding_polygon": [
+          [
+            6.298020680745442,
+            0.31802113850911456
+          ],
+          [
+            7.8999989827473955,
+            0.31802113850911456
+          ],
+          [
+            7.8999989827473955,
+            0.4611461427476671
+          ],
+          [
+            6.298020680745442,
+            0.4611461427476671
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.95,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Case No. 1": {
+        "value": "25-cv-01874",
+        "modified": "25-cv-01874",
+        "original": "25-cv-01874",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Case No. 1: 25-cv-01874",
+        "bounding_polygon": [
+          [
+            6.7710418701171875,
+            0.31802113850911456
+          ],
+          [
+            7.8999989827473955,
+            0.31802113850911456
+          ],
+          [
+            7.8999989827473955,
+            0.4611461427476671
+          ],
+          [
+            6.7710418701171875,
+            0.4611461427476671
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.95,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Page": {
+        "value": "1",
+        "modified": "1",
+        "original": "1",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Page: 1",
+        "bounding_polygon": [
+          [
+            6.2938,
+            0.3294
+          ],
+          [
+            6.6376,
+            0.3294
+          ],
+          [
+            6.6376,
+            0.4679
+          ],
+          [
+            6.2938,
+            0.4679
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.363,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      },
+      "Case No": {
+        "value": "1:25-cv-01874",
+        "modified": "1:25-cv-01874",
+        "original": "1:25-cv-01874",
+        "excel_row": 1,
+        "excel_col": null,
+        "source_type": "pdf",
+        "source_page": 1,
+        "source_text": "Case No: 1:25-cv-01874",
+        "bounding_polygon": [
+          [
+            6.7666,
+            0.3342
+          ],
+          [
+            7.9031,
+            0.3342
+          ],
+          [
+            7.9031,
+            0.4536
+          ],
+          [
+            6.7666,
+            0.4536
+          ]
+        ],
+        "page_width": 8.5,
+        "page_height": 11.0,
+        "confidence": 0.872,
+        "_pdf_raw": true,
+        "source_block": null,
+        "source_para": null,
+        "source_table": null,
+        "source_row": null,
+        "source_col": null
+      }
+    }
+  },
+  "sheet_type": "PDF",
+  "total_rows": 1,
+  "total_cols": 5,
+  "sheet_name": "Page 1",
+  "col_rename_log": {}
+}

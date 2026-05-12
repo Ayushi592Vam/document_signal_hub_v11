@@ -35,6 +35,13 @@ import re
 import textwrap
 import hashlib
 
+
+try:
+    from ui.pdf_analysis import _get_keyword_signal_confidence
+except ImportError:
+    # fallback if import path differs
+    def _get_keyword_signal_confidence(keyword: str, severity: str, context: str = "") -> float:
+        return 0.75
 # ─────────────────────────────────────────────────────────────────────────────
 # CONFIG IMPORT  — graceful degradation if doc_config not yet installed
 # ─────────────────────────────────────────────────────────────────────────────
@@ -687,7 +694,7 @@ Do not stop after finding 1-2 signals. Scan each domain independently:
   2. LITIGATION RISK
      Look for: attorney, lawyer, counsel, lawsuit, litigation, demand letter,
      complaint filed, court, legal action, pre-litigation, settlement demand,
-     bad faith, wrongful death, class action, punitive damages
+     bad faith, class action, punitive damages
  
   3. RECOVERY / SUBROGATION OPPORTUNITY
      Look for: third party liable, subrogation, vendor fault, contractor,
@@ -704,16 +711,14 @@ Do not stop after finding 1-2 signals. Scan each domain independently:
      multiple procedures, hospitalization, ongoing treatment, chiropractic,
      PTSD, pre-existing condition, treatment duration
  
-  6. FRAUD INDICATORS
-     Look for: inconsistent statement, staged, suspicious, prior similar claim,
-     conflicting evidence, unusual pattern, delayed reporting, no witnesses,
-     duplicate billing, upcoding, misrepresentation
+ 
  
   7. COVERAGE ADEQUACY / ISSUES
      Look for: reservation of rights, coverage denied, exclusion, gap,
      underinsured, coinsurance penalty, policy limit, inadequate coverage,
      coverage dispute
  
+
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ANTI-HALLUCINATION RULES (unchanged):
   1. supporting_text must be VERBATIM from the document (max 400 chars)
@@ -722,7 +727,19 @@ ANTI-HALLUCINATION RULES (unchanged):
   4. confidence: 0.90+ verbatim match, 0.70-0.89 equivalent phrase
   5. MULTIPLE SIGNALS ARE EXPECTED — a typical document should produce 3-8
   6. Do NOT stop scanning after finding the first signal per domain
- 
+
+SEVERITY_CLASSIFICATION_RULES:
+  Highly Severe — any of: death, fatality, wrongful death, catastrophic loss,
+                  permanent disability, amputation, paralysis, punitive damages,
+                  bad faith, class action, criminal charges, fraud/misrepresentation
+  High          — any of: surgery, hospitalization, serious injury, attorney involved,
+                  active lawsuit/litigation, large financial exposure, reservation of rights,
+                  subrogation opportunity, coverage denial, staged incident suspected
+  Moderate      — any of: physical therapy, specialist referral, settlement discussion,
+                  mediation/arbitration, delayed reporting, minor inconsistency,
+                  ongoing treatment, reserve adequacy concern
+  Low           — any of: minor injury, minor damage, no attorney, no litigation,
+                  routine treatment, low financial exposure
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  
 Return ONLY valid JSON — no markdown, no preamble, no explanation.
@@ -1015,6 +1032,17 @@ def _keyword_extract_signals(full_text: str, doc_type: str) -> list[dict]:
         ("recovery_subrogation", "Moderate", "partial liability",  "Partial liability identified"),
         ("recovery_subrogation", "Moderate", "contributory",       "Contributory negligence noted"),
         ("recovery_subrogation", "Moderate", "possible recovery",  "Possible recovery identified"),
+        ("recovery_subrogation", "High", "she hit me",       "Third party at fault — claimant states other party caused collision"),
+        ("recovery_subrogation", "High", "he hit me",        "Third party at fault — claimant states other party caused collision"),
+        ("recovery_subrogation", "High", "hit me",           "Third party impact reported — subrogation opportunity"),
+        ("recovery_subrogation", "High", "at fault",         "Fault attributed to third party"),
+        ("recovery_subrogation", "High", "rear ended",       "Rear-end collision — third party fault likely"),
+        ("recovery_subrogation", "High", "rear impact",      "Rear impact — third party fault indicators present"),
+        ("recovery_subrogation", "High", "other driver",     "Other driver involvement noted"),
+        ("recovery_subrogation", "High", "fully stopped",    "Claimant was stationary — supports third party fault"),
+        ("recovery_subrogation", "High", "i was stopped",    "Claimant was stationary at time of impact"),
+        ("recovery_subrogation", "High", "her fault",        "Fault attributed to third party"),
+        ("recovery_subrogation", "High", "his fault",        "Fault attributed to third party"),
  
         # ── 4. SETTLEMENT POSTURE ──────────────────────────────────────────
         ("risk_appetite", "High", "unwilling to settle",   "Claimant unwilling to settle"),
@@ -1048,23 +1076,7 @@ def _keyword_extract_signals(full_text: str, doc_type: str) -> list[dict]:
         ("medical_complexity", "Moderate",      "follow-up required",   "Follow-up care required"),
         ("medical_complexity", "Moderate",      "medication prescribed", "Medication prescribed"),
  
-        # ── 6. FRAUD INDICATORS ────────────────────────────────────────────
-        ("fraud_indicator", "Highly Severe", "staged",              "Staged incident suspected"),
-        ("fraud_indicator", "Highly Severe", "fabricated",          "Fabricated claim evidence"),
-        ("fraud_indicator", "Highly Severe", "false claim",         "False claim language detected"),
-        ("fraud_indicator", "Highly Severe", "misrepresentation",   "Misrepresentation identified"),
-        ("fraud_indicator", "Highly Severe", "fraud confirmed",     "Fraud confirmed in document"),
-        ("fraud_indicator", "High",          "inconsistent statement","Inconsistent statements noted"),
-        ("fraud_indicator", "High",          "conflicting",         "Conflicting information present"),
-        ("fraud_indicator", "High",          "suspicious",          "Suspicious circumstances noted"),
-        ("fraud_indicator", "High",          "prior similar claim", "Prior similar claim history"),
-        ("fraud_indicator", "High",          "duplicate billing",   "Duplicate billing identified"),
-        ("fraud_indicator", "High",          "upcoding",            "Medical upcoding suspected"),
-        ("fraud_indicator", "High",          "unusual pattern",     "Unusual claim pattern detected"),
-        ("fraud_indicator", "Moderate",      "delayed reporting",   "Delayed reporting of loss"),
-        ("fraud_indicator", "Moderate",      "no witnesses",        "No witnesses to incident"),
-        ("fraud_indicator", "Moderate",      "high frequency",      "High claim frequency noted"),
-        ("fraud_indicator", "Moderate",      "prior claims history","Prior claims history present"),
+
  
         # ── 7. COVERAGE ADEQUACY / ISSUES ─────────────────────────────────
         ("coverage_adequacy", "High", "reservation of rights", "Reservation of rights issued"),
@@ -1091,6 +1103,24 @@ def _keyword_extract_signals(full_text: str, doc_type: str) -> list[dict]:
         ("risk_severity", "High",          "open loss",             "Open/reserved loss present"),
         ("risk_severity", "Moderate",      "wind damage",           "Wind damage documented"),
         ("risk_severity", "Moderate",      "water damage",          "Water damage documented"),
+        
+        # ── 8. REPUTATION RISK ─────────────────────────────────────────────
+        ("reputation_risk", "Highly Severe", "bad faith",           "Bad faith claim against carrier"),
+        ("reputation_risk", "Highly Severe", "extra-contractual",   "Extra-contractual liability exposure"),
+        ("reputation_risk", "Highly Severe", "punitive damages",    "Punitive damages sought against carrier"),
+        ("reputation_risk", "Highly Severe", "regulatory complaint","Regulatory complaint filed"),
+        ("reputation_risk", "Highly Severe", "department of insurance", "DOI involvement indicated"),
+        ("reputation_risk", "High",          "unfair claims",       "Unfair claims practices allegation"),
+        ("reputation_risk", "High",          "good faith",          "Good faith handling questioned"),
+        ("reputation_risk", "High",          "media",               "Media exposure or press coverage risk"),
+        ("reputation_risk", "High",          "news coverage",       "News coverage of claim or incident"),
+        ("reputation_risk", "High",          "social media",        "Social media exposure identified"),
+        ("reputation_risk", "High",          "class action",        "Class action reputational exposure"),
+        ("reputation_risk", "High",          "doi complaint",       "Department of Insurance complaint"),
+        ("reputation_risk", "High",          "market conduct",      "Market conduct examination referenced"),
+        ("reputation_risk", "Moderate",      "complaint filed",     "Formal complaint against carrier process"),
+        ("reputation_risk", "Moderate",      "escalated",           "Claim escalated — handling scrutiny"),
+        ("reputation_risk", "Moderate",      "public record",       "Matter entered public record"),
     ]
  
     # ── Find all matches, deduplicate by (type, trigger) ──────────────────
@@ -1128,7 +1158,9 @@ def _keyword_extract_signals(full_text: str, doc_type: str) -> list[dict]:
             "description":     description,
             "supporting_text": snippet,
             "trigger_matched": keyword,
-            "confidence":      0.75,   # keyword match = reasonable confidence
+            "confidence": _get_keyword_signal_confidence(
+                keyword, severity, context=snippet
+            ),
             "_source":         "keyword",
         })
  
@@ -1258,7 +1290,6 @@ YOUR TASK:
    - Recovery/subrogation opportunities (third party fault)
    - Settlement posture (aggressive vs cooperative)
    - Medical complexity
-   - Fraud indicators
    - Coverage issues
  
 RULES:
@@ -1307,6 +1338,80 @@ Return ONLY valid JSON:
  
     return new_signals
 
+
+def _reclassify_signals_by_context(signals: list[dict], full_text: str) -> list[dict]:
+    """
+    Post-process signals to reclassify based on surrounding context.
+
+    Key fix: "liability" / "negligence" / "damages" keywords that appear in a
+    third-party-fault context (rear-end, "she hit me", "I was stopped", etc.)
+    should be recovery_subrogation, not legal_escalation.
+    """
+    import re as _re
+    text_lower = full_text.lower()
+
+    _THIRD_PARTY_FAULT_PHRASES = [
+        "she hit me", "he hit me", "they hit me",
+        "hit me", "ran into me", "rear ended", "rear impact",
+        "at fault", "her fault", "his fault", "their fault",
+        "other driver", "other vehicle", "other party",
+        "pushed me into", "pushed you into",
+        "she's at fault", "he's at fault",
+        "i was stopped", "fully stopped", "was stationary",
+        "ran a red", "ran the red", "ran a stop",
+        "wrong lane", "wrong side",
+        "third party", "subrogation",
+        # Add: generic "assume she/he at fault" language
+        "assume she", "assume he", "i assume",
+    ]
+
+    # Phrases that confirm genuine litigation (keep as legal_escalation)
+    _LITIGATION_CONFIRMED_PHRASES = [
+        "filed suit", "lawsuit filed", "attorney retained",
+        "counsel retained", "legal action", "demand letter",
+        "punitive", "bad faith", "complaint filed", "court filing",
+        "class action", "pre-litigation",
+    ]
+
+    # Triggers that should be reclassified when third-party context present
+    _RECLASSIFY_TRIGGERS = {
+        "liability", "negligence", "damages", "damages sought",
+        "third party",
+    }
+
+    reclassified: list[dict] = []
+
+    for sig in signals:
+        sig = dict(sig)
+        trigger  = (sig.get("trigger_matched") or "").lower().strip()
+        sig_type = sig.get("type", "")
+        support  = (sig.get("supporting_text") or "").lower()
+
+        # Only attempt reclassification for legal_escalation signals whose
+        # trigger is in the ambiguous set
+        if sig_type == "legal_escalation" and trigger in _RECLASSIFY_TRIGGERS:
+            # Use both the supporting snippet AND the broader document text
+            context = support + " " + text_lower[:5000]
+
+            has_third_party = any(
+                phrase in context for phrase in _THIRD_PARTY_FAULT_PHRASES
+            )
+            has_confirmed_litigation = any(
+                phrase in context for phrase in _LITIGATION_CONFIRMED_PHRASES
+            )
+
+            if has_third_party and not has_confirmed_litigation:
+                sig["type"]           = "recovery_subrogation"
+                sig["severity_level"] = "High"
+                sig["description"]    = (
+                    "Third-party fault indicated — potential subrogation opportunity. "
+                    + sig.get("description", "")
+                )
+                sig["_reclassified_from"] = "legal_escalation"
+
+        reclassified.append(sig)
+
+    return reclassified
 
 def _llm_filter_entities(entities: dict, doc_type: str, full_text: str) -> dict:
     """
@@ -1528,7 +1633,7 @@ def analyse_document(
         + (f" / Sub-type: {subtype}" if subtype else "")
         + "\\nDetect ALL risk signals across ALL domains. Be exhaustive — do not stop after 2-3 signals."
         + "\\nScan for: injury severity, litigation risk, recovery/subrogation, settlement posture, "
-        + "medical complexity, fraud indicators, and coverage issues."
+        + "medical complexity, and coverage issues."
         + f"\\n\\n--- DOCUMENT TEXT ---\\n{full_text[:10000]}"
     )
     result_b = _llm_call(
@@ -1653,6 +1758,17 @@ def analyse_document(
     judge.setdefault("signal_validation", "")
     judge.setdefault("data_quality", "")
     judge.setdefault("recommendations", "")
+    
+
+     # ── Import and apply signal deduplication ─────────────────────────────
+    try:
+        from ui.pdf_analysis import _semantic_dedup_signals, _consolidate_signals
+        signals = _semantic_dedup_signals(signals)
+        signals = _consolidate_signals(signals, doc_type)
+    except ImportError:
+        pass   # safe fallback — dedup also runs in the UI layer
+
+    signals = _reclassify_signals_by_context(signals, full_text)
 
     return {
         "summary":       summary,

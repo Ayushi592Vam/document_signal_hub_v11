@@ -46,7 +46,51 @@ import streamlit as st
 
 import re as _re_kw  # ← add this at the TOP of pdf_analysis.py with other imports
 
+def _synthesize_signals_from_entities(intelligence: dict) -> list[dict]:
+    doc_type  = intelligence.get("doc_type", "")
+    full_text = (intelligence.get("full_text", "") or "").lower()
+    entities  = intelligence.get("analysis", {}).get("entities", {})
 
+    entity_blob = " ".join(
+        str(v.get("value", "")) if isinstance(v, dict) else str(v)
+        for v in entities.values()
+    ).lower()
+    corpus = full_text + " " + entity_blob
+
+    keyword_rules = list(_SIGNAL_KEYWORDS.get(doc_type, [])) + _SIGNAL_KEYWORDS_GENERIC
+    seen: set[str] = set()
+    signals: list[dict] = []
+
+    for sig_type, severity, keyword, description in keyword_rules:
+        dedup_key = f"{sig_type}:{keyword}"
+        if dedup_key in seen:
+            continue
+
+        _match = _re_kw.search(r'\b' + _re_kw.escape(keyword.lower()) + r'\b', corpus)
+        if not _match:
+            continue
+
+        seen.add(dedup_key)
+        idx = _match.start()  # ← use match position directly
+
+        # Find clean word boundary to avoid mid-word cuts
+        snippet_start = max(0, idx - 80)
+        while snippet_start > 0 and corpus[snippet_start - 1] not in (' ', '\n', '.'):
+            snippet_start -= 1
+
+        snippet = corpus[snippet_start: idx + 200].strip().replace("\n", " ")
+        signals.append({
+            "type":            sig_type,
+            "severity_level":  severity,
+            "description":     description,
+            "supporting_text": snippet,
+            "trigger_matched": keyword,
+            "confidence":      _get_keyword_signal_confidence(keyword, severity),
+            "_synthesized":    True,
+            "_source":         "keyword",
+        })
+
+    return signals
 
 # Fields to KEEP per doc type from ADI backfill (anything not in this list is dropped)
 _DOC_TYPE_ADI_ALLOWLIST: dict[str, set[str]] = {
@@ -128,11 +172,55 @@ _DOC_TYPE_META_FALLBACK: dict[str, dict] = {
 _SIGNAL_META_FALLBACK: dict[str, dict] = {
     "severity":           {"icon": "🩸", "label": "Injury / Loss Severity", "color": "#dc2626"},
     "legal_escalation":   {"icon": "⚖️", "label": "Litigation Risk",        "color": "#7c3aed"},
-    "fraud_indicator":    {"icon": "🚩", "label": "Fraud Red Flags",         "color": "#d97706"},
+    
     "medical_complexity": {"icon": "🏥", "label": "Medical Complexity",      "color": "#2563eb"},
     "coverage_adequacy":  {"icon": "📋", "label": "Coverage Gap",            "color": "#b45309"},
     "recovery_subrogation":{"icon":"🔄", "label": "Recovery / Subrogation",  "color": "#059669"},
+    
 }
+
+# ── Risk category classification for signals ──────────────────────────────
+_SIGNAL_RISK_CATEGORY: dict[str, tuple[str, str, str]] = {
+    # ── 4 canonical risk categories ───────────────────────────────────────
+    # Litigation Risk
+    "legal_escalation":      ("Litigation Risk",  "#7c3aed", "#f5f3ff"),
+    "litigation_exposure":   ("Litigation Risk",  "#7c3aed", "#f5f3ff"),
+   
+    # Exposure Risk  (severity + medical + recovery/subrogation)
+    "severity":              ("Exposure Risk",    "#dc2626", "#fef2f2"),
+    "medical_complexity":    ("Exposure Risk",    "#dc2626", "#fef2f2"),
+    "risk_severity":         ("Exposure Risk",    "#dc2626", "#fef2f2"),
+    "recovery_subrogation":  ("Exposure Risk",    "#dc2626", "#fef2f2"),
+    # Coverage Risk
+    "coverage_adequacy":     ("Coverage Risk",    "#b45309", "#fffbeb"),
+    "coverage_issue":        ("Coverage Risk",    "#b45309", "#fffbeb"),
+    # Reputation Risk
+    "risk_appetite":         ("Reputation Risk",  "#0284c7", "#e0f2fe"),
+    "reputation_risk":       ("Reputation Risk",  "#0284c7", "#e0f2fe"),
+}
+
+def _get_risk_category(signal_type: str) -> tuple[str, str, str]:
+    if not signal_type:
+        return ("Exposure Risk", "#dc2626", "#fef2f2")
+
+    s = signal_type.lower().strip()
+
+    # Direct lookup first
+    if s in _SIGNAL_RISK_CATEGORY:
+        return _SIGNAL_RISK_CATEGORY[s]
+
+    # Fuzzy fallback — 4 categories only
+    if any(k in s for k in ("legal", "litigation", "attorney", "lawsuit")):
+        return ("Litigation Risk", "#7c3aed", "#f5f3ff")
+    if any(k in s for k in ("recovery", "subroga", "severity", "medical",
+                             "injury", "risk_sev")):
+        return ("Exposure Risk", "#dc2626", "#fef2f2")
+    if any(k in s for k in ("coverage", "adequacy")):
+        return ("Coverage Risk", "#b45309", "#fffbeb")
+    if any(k in s for k in ("reputation", "appetite")):
+        return ("Reputation Risk", "#0284c7", "#e0f2fe")
+
+    return ("Exposure Risk", "#dc2626", "#fef2f2")
 
 _TAXONOMY = {
     "Highly Severe": {"color": "#dc2626", "bg": "rgba(220,38,38,0.06)",  "icon": "🔥"},
@@ -341,11 +429,7 @@ _SIGNAL_KEYWORDS: dict[str, list[tuple[str, str, str, str]]] = {
         ("recovery_subrogation","High",       "third party",       "Third party involvement"),
         ("recovery_subrogation","High",       "subrogation",       "Subrogation opportunity"),
         ("recovery_subrogation","High",       "vendor",            "Vendor fault identified"),
-        # Fraud
-        ("fraud_indicator",   "High",         "inconsistent",      "Inconsistency detected"),
-        ("fraud_indicator",   "High",         "suspicious",        "Suspicious circumstances"),
-        ("fraud_indicator",   "Highly Severe","misrepresentation", "Misrepresentation noted"),
-        ("fraud_indicator",   "Highly Severe","false",             "False statement detected"),
+        
     ],
     "FNOL": [
         ("severity",           "Highly Severe","fatality",         "Fatality reported at FNOL"),
@@ -481,53 +565,73 @@ _SIGNAL_KEYWORDS_GENERIC: list[tuple[str, str, str, str]] = [
     ("coverage_adequacy",  "High",          "reservation",       "Reservation of rights"),
 ]
 
-# ── Keyword signal confidence scoring ─────────────────────────────────────────
-_SIGNAL_CONFIDENCE: dict[str, dict[str, float]] = {
-    "wrongful death":      {"base": 0.95},
-    "fatal":               {"base": 0.90},
-    "death":               {"base": 0.90},
-    "deceased":            {"base": 0.90},
-    "catastrophic":        {"base": 0.88},
-    "punitive":            {"base": 0.92},
-    "bad faith":           {"base": 0.92},
-    "class action":        {"base": 0.95},
-    "fraud":               {"base": 0.90},
-    "misrepresentation":   {"base": 0.88},
-    "staged":              {"base": 0.85},
-    "criminal":            {"base": 0.90},
-    "permanent disability":{"base": 0.88},
-    "amputation":          {"base": 0.92},
-    "paralysis":           {"base": 0.92},
-    "surgery":             {"base": 0.75},
-    "attorney":            {"base": 0.78},
-    "lawsuit":             {"base": 0.80},
-    "litigation":          {"base": 0.80},
-    "hospitalized":        {"base": 0.75},
-    "fracture":            {"base": 0.72},
-    "subrogation":         {"base": 0.78},
-    "reservation of rights":{"base": 0.82},
-    "torn":                {"base": 0.55},
-    "severe":              {"base": 0.60},
-    "injury":              {"base": 0.55},
-    "damage":              {"base": 0.50},
-    "pain":                {"base": 0.45},
-    "inconsistent":        {"base": 0.60},
-    "suspicious":          {"base": 0.62},
-    "open":                {"base": 0.45},
-    "reserve":             {"base": 0.50},
-}
 
-_SEVERITY_CONFIDENCE_BOOST: dict[str, float] = {
-    "Highly Severe": +0.05,
-    "High":          +0.02,
-    "Moderate":       0.00,
-    "Low":           -0.05,
-}
+def _get_keyword_signal_confidence(keyword: str, severity: str, context: str = "") -> float:
+    import math
 
-def _get_keyword_signal_confidence(keyword: str, severity: str) -> float:
-    base  = _SIGNAL_CONFIDENCE.get(keyword.lower(), {}).get("base", 0.55)
-    boost = _SEVERITY_CONFIDENCE_BOOST.get(severity, 0.0)
-    return round(min(0.97, max(0.30, base + boost)), 2)
+    _ANCHOR_SCORES = {
+        "wrongful death":        0.95,
+        "class action":          0.95,
+        "punitive":              0.92,
+        "bad faith":             0.92,
+        "amputation":            0.92,
+        "paralysis":             0.92,
+        "permanent disability":  0.88,
+        "misrepresentation":     0.88,
+        "catastrophic":          0.88,
+        "fatal":                 0.90,
+        "death":                 0.90,
+        "deceased":              0.90,
+        "fraud":                 0.90,
+        "criminal":              0.90,
+        "staged":                0.85,
+        "surgery":               0.75,
+        "attorney":              0.78,
+        "lawsuit":               0.80,
+        "litigation":            0.80,
+        "hospitalized":          0.75,
+        "subrogation":           0.78,
+        "reservation of rights": 0.82,
+        "fracture":              0.72,
+        "inconsistent":          0.60,
+        "suspicious":            0.62,
+        "severe":                0.60,
+        "injury":                0.55,
+        "damage":                0.50,
+        "pain":                  0.45,
+        "open":                  0.45,
+        "reserve":               0.50,
+    }
+
+    _SEVERITY_WEIGHT = {
+        "Highly Severe": 1.06,
+        "High":          1.02,
+        "Moderate":      1.00,
+        "Low":           0.94,
+    }
+
+    kw_lower = keyword.lower().strip()
+
+    # Step 1: base from anchor table or derive continuously from keyword shape
+    if kw_lower in _ANCHOR_SCORES:
+        base = _ANCHOR_SCORES[kw_lower]
+    else:
+        word_count = len(kw_lower.split())
+        char_count = len(kw_lower)
+        base = 0.40 + 0.12 * math.log1p(word_count) + 0.002 * min(char_count, 20)
+        base = min(base, 0.82)
+
+    # Step 2: multiplicative severity weight (proportional, not flat)
+    base *= _SEVERITY_WEIGHT.get(severity, 1.00)
+
+    # Step 3: context density bonus
+    if context:
+        kw_words      = set(kw_lower.split())
+        ctx_words     = set(context.lower().split())
+        overlap       = len(kw_words & ctx_words) / max(len(kw_words), 1)
+        base         += 0.05 * overlap
+
+    return round(min(0.97, max(0.30, base)), 2)
 
 
 def _synthesize_signals_from_entities(intelligence: dict) -> list[dict]:
@@ -569,7 +673,7 @@ def _synthesize_signals_from_entities(intelligence: dict) -> list[dict]:
             "description":     description,
             "supporting_text": snippet,
             "trigger_matched": keyword,
-            "confidence":      _get_keyword_signal_confidence(keyword, severity),
+            "confidence":      _get_keyword_signal_confidence(keyword, severity, context=snippet),
             "_synthesized":    True,
             "_source":         "keyword",
         })
@@ -3987,9 +4091,155 @@ def _render_single_signal(sig, level, tax, tc, doc_type):
         unsafe_allow_html=True,
     )
  
+ # ADD this new function in pdf_analysis.py, just before _render_signals_tab:
+
+def _consolidate_signals(signals: list[dict], doc_type: str) -> list[dict]:
+    """
+    Merge redundant signals of the same type+severity into a single
+    representative signal. Keeps the highest-confidence signal's metadata
+    but appends all unique trigger keywords into the description.
+    
+    Also applies a MAX_PER_TYPE cap to prevent signal floods.
+    """
+    _MAX_PER_TYPE = 2   # max signals shown per (type, severity) pair
+
+    # Group by (type, severity_level)
+    from collections import defaultdict
+    groups: dict[tuple, list[dict]] = defaultdict(list)
+    
+    for sig in signals:
+        sig_type = sig.get("type", "unknown")
+        severity = sig.get("severity_level", "Low")
+        groups[(sig_type, severity)].append(sig)
+    
+    consolidated: list[dict] = []
+    
+    for (sig_type, severity), group in groups.items():
+        # Sort by confidence descending
+        group_sorted = sorted(
+            group,
+            key=lambda s: float(s.get("confidence", 0)),
+            reverse=True,
+        )
+        
+        # Keep only top MAX_PER_TYPE
+        kept = group_sorted[:_MAX_PER_TYPE]
+        
+        if len(group_sorted) <= _MAX_PER_TYPE:
+            consolidated.extend(kept)
+            continue
+        
+        # More than MAX — merge into one representative signal
+        best = dict(group_sorted[0])  # copy of highest confidence
+        
+        # Collect all unique triggers
+        all_triggers = list(dict.fromkeys(
+            s.get("trigger_matched", "").strip()
+            for s in group_sorted
+            if s.get("trigger_matched", "").strip()
+        ))
+        
+        # Update description to mention count
+        merged_count = len(group_sorted)
+        best["description"] = (
+            best.get("description", "")
+            + f" [{merged_count} related signals consolidated: "
+            + ", ".join(all_triggers[:6])
+            + (f" +{len(all_triggers)-6} more" if len(all_triggers) > 6 else "")
+            + "]"
+        )
+        best["trigger_matched"] = all_triggers[0]  # primary trigger
+        best["_consolidated_count"] = merged_count
+        best["_all_triggers"] = all_triggers
+        
+        consolidated.append(best)
+    
+    return consolidated
+
+
+# ALSO add this semantic dedup — catches near-duplicate signals 
+# across different trigger words that mean the same thing:
+
+# _SIGNAL_SEMANTIC_GROUPS: dict[str, list[str]] = {
+#     # If ANY of these triggers fires, suppress the rest in the same doc
+#     "litigation_active": [
+#         "lawsuit filed", "lawsuit", "litigation initiated", "litigation",
+#         "complaint filed", "legal action", "suit filed",
+#     ],
+#     "attorney_present": [
+#         "attorney", "attorney involved", "attorney retained", 
+#         "counsel retained", "legal representation",
+#     ],
+#     "parties_identified": [
+#         "plaintiff", "defendant",
+#     ],
+#     "negligence_liability": [
+#         "negligence", "liability", "damages sought", "damages",
+#     ],
+#     "legal_proceedings": [
+#         "court", "deposition", "arbitration", "mediation",
+#     ],
+# }
+_SIGNAL_SEMANTIC_GROUPS: dict[str, list[str]] = {
+    "litigation_active": [
+        "lawsuit filed", "lawsuit", "litigation initiated", "litigation",
+        "complaint filed", "legal action", "suit filed",
+    ],
+    "attorney_present": [
+        "attorney", "attorney involved", "attorney retained",
+        "counsel retained", "legal representation",
+    ],
+    "parties_identified": [
+        "plaintiff", "defendant",
+    ],
+    "negligence_liability": [
+        "negligence",                    # ← removed "liability" from here
+        "damages sought", "damages",
+    ],
+    "legal_proceedings": [
+        "court", "deposition", "arbitration", "mediation",
+    ],
+}
+
+def _semantic_dedup_signals(signals: list[dict]) -> list[dict]:
+    """
+    Within each semantic group, keep only the highest-confidence signal.
+    This prevents 'lawsuit filed' + 'lawsuit' + 'litigation' all firing
+    for the same underlying fact.
+    """
+    # Build reverse map: trigger → group_name
+    trigger_to_group: dict[str, str] = {}
+    for group_name, triggers in _SIGNAL_SEMANTIC_GROUPS.items():
+        for t in triggers:
+            trigger_to_group[t.lower()] = group_name
+    
+    seen_groups: set[str] = set()
+    result: list[dict] = []
+    
+    # Sort by confidence first so we keep the best one per group
+    signals_sorted = sorted(
+        signals,
+        key=lambda s: float(s.get("confidence", 0)),
+        reverse=True,
+    )
+    
+    for sig in signals_sorted:
+        trigger = (sig.get("trigger_matched") or "").lower().strip()
+        group   = trigger_to_group.get(trigger)
+        
+        if group:
+            # Only keep the first (highest confidence) signal per semantic group
+            # BUT also check same signal type to avoid cross-type suppression
+            group_key = f"{sig.get('type','')}__{group}"
+            if group_key in seen_groups:
+                continue
+            seen_groups.add(group_key)
+        
+        result.append(sig)
+    
+    return result
 
 def _render_signals_tab(intelligence: dict) -> None:
-    """v13 PATCH: Signals grouped by type as compact 3-column tables. Source legend removed."""
     import html as _html
 
     raw_llm_signals = intelligence.get("analysis", {}).get("signals", [])
@@ -4000,6 +4250,10 @@ def _render_signals_tab(intelligence: dict) -> None:
         signals = _synthesize_signals_from_entities(intelligence)
         for s in signals:
             s["_source"] = "keyword"
+
+    # ── DEDUP: semantic grouping first, then consolidation ────────────────
+    signals = _semantic_dedup_signals(signals)
+    signals = _consolidate_signals(signals, doc_type)
 
     st.markdown(
         _section_header(
@@ -4020,166 +4274,265 @@ def _render_signals_tab(intelligence: dict) -> None:
         )
         return
 
-    # ── Group by severity first, then by signal type ──────────────────────
-    grouped_by_severity: dict[str, list[dict]] = {lv: [] for lv in _TAXONOMY}
-    for sig in signals:
-        grouped_by_severity[_classify_severity(sig, doc_type)].append(sig)
+    # ── Sort all signals by severity ──────────────────────────────────────
+    # REPLACE the sorted_signals block with:
+    _SEV_ORDER = {"Highly Severe": 0, "High": 1, "Moderate": 2, "Low": 3}
 
-    # ── Severity summary pills ────────────────────────────────────────────
-    pills = "".join(
-        f"<span style='background:{_TAXONOMY[lv]['bg']};"
-        f"border:1px solid {_TAXONOMY[lv]['color']}40;border-radius:20px;"
-        f"padding:4px 12px;font-size:11px;font-weight:700;"
-        f"color:{_TAXONOMY[lv]['color']};font-family:monospace;'>"
-        f"{_TAXONOMY[lv]['icon']} {lv} ({len(sigs)})</span>"
-        for lv, sigs in grouped_by_severity.items()
-        if sigs
+    sorted_signals = sorted(
+        signals,
+        key=lambda s: (
+            _SEV_ORDER.get(_classify_severity(s, doc_type), 99),  # 1st: severity
+            -float(s.get("confidence", 0)),                        # 2nd: confidence desc
+            s.get("_synthesized", False),                          # 3rd: LLM before keyword
+        ),
     )
-    if pills:
-        st.markdown(
-            f"<div style='display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;'>"
-            f"{pills}</div>",
-            unsafe_allow_html=True,
-        )
 
-    # ── Render each severity band ─────────────────────────────────────────
-    for level in ["Highly Severe", "High", "Moderate", "Low"]:
-        level_sigs = grouped_by_severity.get(level, [])
-        if not level_sigs:
-            continue
+    # Pick top 2 with type diversity — avoid showing same signal type twice
+    top_2: list[dict] = []
+    seen_types: set[str] = set()
+    for sig in sorted_signals:
+        sig_type = sig.get("type", "unknown")
+        if sig_type not in seen_types:
+            top_2.append(sig)
+            seen_types.add(sig_type)
+        if len(top_2) == 2:
+            break
 
-        tax = _TAXONOMY[level]
-        tc  = tax["color"]
+    # Fallback: if diversity couldn't fill 2 slots, just take top 2
+    if len(top_2) < 2:
+        top_2 = sorted_signals[:2]
 
-        # Section header for severity band
-        st.markdown(
-            f"<div style='display:flex;align-items:center;gap:8px;margin:20px 0 12px 0;'>"
-            f"<span style='font-size:16px;'>{tax['icon']}</span>"
-            f"<span style='font-size:12px;font-weight:700;color:{tc};"
-            f"font-family:monospace;text-transform:uppercase;letter-spacing:1.2px;'>{level}</span>"
-            f"<div style='flex:1;height:1px;background:{tc}30;'></div>"
-            f"<span style='font-size:10px;color:{tc};font-family:monospace;"
-            f"background:{tax['bg']};border:1px solid {tc}30;border-radius:10px;"
-            f"padding:1px 8px;'>{len(level_sigs)} signal(s)</span>"
-            f"</div>",
-            unsafe_allow_html=True,
-        )
+    # ══════════════════════════════════════════════════════════════════════
+    # ── TOP 2 SIGNALS HERO ────────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════════════════
+    
+    st.markdown(
+        f"<div style='font-size:10px;font-weight:700;color:#b45309;"
+        f"font-family:monospace;text-transform:uppercase;letter-spacing:2px;"
+        f"margin-bottom:10px;'>⚡ Top Signals Requiring Attention</div>",
+        unsafe_allow_html=True,
+    )
+    hero_cols = st.columns(len(top_2))
+    for col, sig in zip(hero_cols, top_2):
+        level    = _classify_severity(sig, doc_type)
+        tax      = _TAXONOMY[level]
+        tc       = tax["color"]
+        sig_type = sig.get("type", "unknown")
+        m        = _get_signal_meta(sig_type, doc_type)
+        rc_label, rc_color, rc_bg = _get_risk_category(sig_type)
+        conf_val = float(sig.get("confidence", 0))
+        conf_str = f"{int(conf_val*100)}%" if conf_val > 0 else ""
+        support  = (sig.get("supporting_text") or "")[:180]
+        safe_sup = _html.escape(support) if support else ""
 
-        # ── Group by signal type within this severity band ────────────────
-        type_groups: dict[str, list[dict]] = {}
-        for sig in level_sigs:
-            stype = sig.get("type", "unknown")
-            type_groups.setdefault(stype, []).append(sig)
-
-        for sig_type, type_sigs in type_groups.items():
-            m = _get_signal_meta(sig_type, doc_type)
-            c = m["color"]
-
-            # ── Table header ──────────────────────────────────────────────
+        with col:
             st.markdown(
-                f"<div style='display:flex;align-items:center;gap:8px;"
-                f"margin:14px 0 6px 0;'>"
-                f"<span style='font-size:15px;'>{m['icon']}</span>"
-                f"<span style='font-size:12px;font-weight:700;color:{c};"
-                f"font-family:monospace;text-transform:uppercase;letter-spacing:1px;'>"
-                f"{m['label']}</span>"
-                f"<span style='font-size:10px;color:{_LBL};font-family:monospace;"
-                f"background:{_BG2};border:1px solid {_BORDER};border-radius:10px;"
-                f"padding:1px 8px;'>{len(type_sigs)} occurrence(s)</span>"
+                f"<div style='background:{tax['bg']};border:2px solid {tc}40;"
+                f"border-top:4px solid {tc};border-radius:10px;padding:16px 18px;"
+                f"min-height:160px;'>"
+                f"<div style='display:flex;align-items:center;gap:8px;margin-bottom:10px;'>"
+                f"<span style='font-size:20px;'>{m['icon']}</span>"
+                f"<div style='flex:1;'>"
+                f"<div style='font-size:11px;font-weight:700;color:{tc};"
+                f"font-family:monospace;text-transform:uppercase;letter-spacing:1px;"
+                f"line-height:1.3;'>{m['label']}</div>"
+                f"<div style='display:flex;gap:6px;margin-top:4px;flex-wrap:wrap;'>"
+                f"<span style='font-size:9px;color:{tc};background:{_BG};border:1px solid {tc}30;"
+                f"border-radius:10px;padding:1px 8px;font-family:monospace;font-weight:700;'>"
+                f"{tax['icon']} {level}</span>"
+                f"<span style='font-size:9px;color:{rc_color};background:{rc_bg};"
+                f"border:1px solid {rc_color}30;border-radius:10px;"
+                f"padding:1px 8px;font-family:monospace;font-weight:700;'>"
+                f"{rc_label}</span>"
+                + (f"<span style='font-size:9px;color:{_LBL};font-family:monospace;"
+                   f"background:{_BG2};border:1px solid {_BORDER};border-radius:10px;"
+                   f"padding:1px 8px;'>{conf_str}</span>" if conf_str else "")
+                + f"</div></div></div>"
+                f"<div style='font-size:12px;color:{_TXT};line-height:1.6;margin-bottom:8px;'>"
+                f"{_html.escape(sig.get('description',''))}</div>"
+                + (
+                    f"<div style='font-size:10px;color:{_LBL};font-family:monospace;"
+                    f"font-style:italic;background:{_BG};border-left:3px solid {tc}40;"
+                    f"padding:5px 8px;border-radius:0 4px 4px 0;"
+                    f"line-height:1.5;word-break:break-word;'>"
+                    f"&ldquo;{safe_sup}…&rdquo;</div>"
+                    if safe_sup else ""
+                )
+                + f"</div>",
+                unsafe_allow_html=True,
+            )
+
+    st.markdown(
+        f"<div style='height:1px;background:linear-gradient(90deg,{_BORDER2},{_BG});"
+        f"margin:20px 0 16px 0;'></div>",
+        unsafe_allow_html=True,
+    )
+
+    # ── "Show all" expander for remaining signals ─────────────────────────
+    remaining = sorted_signals[2:]
+    remaining_count = len(remaining)
+
+    with st.expander(
+        f"📋 View all {len(signals)} signals" + (f" — {remaining_count} more below" if remaining_count else ""),
+        expanded=False,
+    ):
+        # ── Group by severity first, then by signal type ──────────────────
+        grouped_by_severity: dict[str, list[dict]] = {lv: [] for lv in _TAXONOMY}
+        for sig in signals:
+            grouped_by_severity[_classify_severity(sig, doc_type)].append(sig)
+
+        # ── Severity summary pills ────────────────────────────────────────
+        pills = "".join(
+            f"<span style='background:{_TAXONOMY[lv]['bg']};"
+            f"border:1px solid {_TAXONOMY[lv]['color']}40;border-radius:20px;"
+            f"padding:4px 12px;font-size:11px;font-weight:700;"
+            f"color:{_TAXONOMY[lv]['color']};font-family:monospace;'>"
+            f"{_TAXONOMY[lv]['icon']} {lv} ({len(sigs)})</span>"
+            for lv, sigs in grouped_by_severity.items()
+            if sigs
+        )
+        if pills:
+            st.markdown(
+                f"<div style='display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;'>"
+                f"{pills}</div>",
+                unsafe_allow_html=True,
+            )
+
+        # ── Render each severity band ─────────────────────────────────────
+        for level in ["Highly Severe", "High", "Moderate", "Low"]:
+            level_sigs = grouped_by_severity.get(level, [])
+            if not level_sigs:
+                continue
+
+            tax = _TAXONOMY[level]
+            tc  = tax["color"]
+
+            st.markdown(
+                f"<div style='display:flex;align-items:center;gap:8px;margin:20px 0 12px 0;'>"
+                f"<span style='font-size:16px;'>{tax['icon']}</span>"
+                f"<span style='font-size:12px;font-weight:700;color:{tc};"
+                f"font-family:monospace;text-transform:uppercase;letter-spacing:1.2px;'>{level}</span>"
+                f"<div style='flex:1;height:1px;background:{tc}30;'></div>"
+                f"<span style='font-size:10px;color:{tc};font-family:monospace;"
+                f"background:{tax['bg']};border:1px solid {tc}30;border-radius:10px;"
+                f"padding:1px 8px;'>{len(level_sigs)} signal(s)</span>"
                 f"</div>",
                 unsafe_allow_html=True,
             )
 
-            # ── Build 3-column table rows ─────────────────────────────────
-            rows_html = ""
-            for i, sig in enumerate(type_sigs):
-                trigger     = _html.escape(sig.get("trigger_matched", "—") or "—")
-                description = _html.escape(sig.get("description", "—") or "—")
-                support_raw = (sig.get("supporting_text", "") or "").strip()
-                support = _html.escape(support_raw[:1200]) if support_raw else "—"
+            type_groups: dict[str, list[dict]] = {}
+            for sig in level_sigs:
+                stype = sig.get("type", "unknown")
+                type_groups.setdefault(stype, []).append(sig)
 
-                is_unverified = sig.get("_unverified", False)
-                row_bg = "#ffffff" if i % 2 == 0 else _BG2
+            for sig_type, type_sigs in type_groups.items():
+                m = _get_signal_meta(sig_type, doc_type)
+                c = m["color"]
 
-                unverified_marker = (
-                    f"<span style='font-size:9px;color:#dc2626;"
-                    f"background:#fef2f2;border:1px solid #fecaca;"
-                    f"border-radius:4px;padding:1px 5px;"
-                    f"font-family:monospace;margin-left:5px;'>⚠ unverified</span>"
-                    if is_unverified else ""
+                st.markdown(
+                    f"<div style='display:flex;align-items:center;gap:8px;"
+                    f"margin:14px 0 6px 0;'>"
+                    f"<span style='font-size:15px;'>{m['icon']}</span>"
+                    f"<span style='font-size:12px;font-weight:700;color:{c};"
+                    f"font-family:monospace;text-transform:uppercase;letter-spacing:1px;'>"
+                    f"{m['label']}</span>"
+                    f"<span style='font-size:10px;color:{_LBL};font-family:monospace;"
+                    f"background:{_BG2};border:1px solid {_BORDER};border-radius:10px;"
+                    f"padding:1px 8px;'>{len(type_sigs)} occurrence(s)</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
                 )
 
-                conf_val = float(sig.get("confidence", 0))
-                conf_html = (
-                    f"<span style='font-size:9px;color:{_LBL};"
-                    f"font-family:monospace;margin-left:5px;'>"
-                    f"{int(conf_val*100)}%</span>"
-                    if conf_val > 0 else ""
-                )
+                rows_html = ""
+                for i, sig in enumerate(type_sigs):
+                    trigger     = _html.escape(sig.get("trigger_matched", "—") or "—")
+                    description = _html.escape(sig.get("description", "—") or "—")
+                    support_raw = (sig.get("supporting_text", "") or "").strip()
+                    support     = _html.escape(support_raw[:1200]) if support_raw else "—"
+                    is_unverified = sig.get("_unverified", False)
+                    row_bg      = "#ffffff" if i % 2 == 0 else _BG2
+                    rc_label, rc_color, rc_bg = _get_risk_category(sig.get("type", ""))
 
-                rows_html += (
-                    f"<tr style='background:{row_bg};'>"
-                    # Col 1: Trigger
-                    f"<td style='padding:10px 12px;border-bottom:1px solid {_BORDER};"
-                    f"border-right:1px solid {_BORDER};vertical-align:top;width:20%;'>"
-                    f"<div style='display:inline-flex;align-items:center;"
-                    f"background:{c}12;border:1px solid {c}30;border-radius:6px;"
-                    f"padding:3px 8px;font-size:11px;font-weight:700;"
-                    f"color:{c};font-family:monospace;white-space:nowrap;'>"
-                    f"🎯 {trigger}</div>"
-                    f"{conf_html}{unverified_marker}"
-                    f"</td>"
-                    # Col 2: Statement / Description
-                    f"<td style='padding:10px 12px;border-bottom:1px solid {_BORDER};"
-                    f"border-right:1px solid {_BORDER};vertical-align:top;width:35%;'>"
-                    f"<div style='font-size:12px;color:{_TXT};line-height:1.6;'>"
-                    f"{description}</div>"
-                    f"</td>"
-                    # Col 3: Verbatim quote
-                    f"<td style='padding:10px 12px;border-bottom:1px solid {_BORDER};"
-                    f"vertical-align:top;width:45%;'>"
-                    f"<div style='font-size:11px;color:{_LBL};font-family:monospace;"
-                    f"font-style:italic;line-height:1.6;"
-                    f"background:{_BG2};border-left:3px solid {c}40;"
-                    f"padding:6px 10px;border-radius:0 4px 4px 0;"
-                    f"word-break:break-word;overflow-wrap:anywhere;'>"
-                    + (f"&ldquo;{support}&rdquo;" if support != "—" else "<span style='color:#94a3b8;'>no verbatim snippet</span>")
-                    + f"</div>"
-                    f"</td>"
-                    f"</tr>"
-                )
+                    unverified_marker = (
+                        f"<span style='font-size:9px;color:#dc2626;"
+                        f"background:#fef2f2;border:1px solid #fecaca;"
+                        f"border-radius:4px;padding:1px 5px;"
+                        f"font-family:monospace;margin-left:5px;'>⚠ unverified</span>"
+                        if is_unverified else ""
+                    )
+                    conf_val  = float(sig.get("confidence", 0))
+                    conf_html = (
+                        f"<span style='font-size:9px;color:{_LBL};"
+                        f"font-family:monospace;margin-left:5px;'>"
+                        f"{int(conf_val*100)}%</span>"
+                        if conf_val > 0 else ""
+                    )
 
-            # ── Render the table ──────────────────────────────────────────
-            st.markdown(
-                f"<div style='border:1px solid {_BORDER};border-radius:8px;"
-                f"overflow:hidden;margin-bottom:16px;'>"
-                f"<table style='width:100%;border-collapse:collapse;'>"
-                f"<thead>"
-                f"<tr style='background:{c}08;'>"
-                f"<th style='padding:8px 12px;text-align:left;font-size:10px;"
-                f"font-weight:700;color:{c};font-family:monospace;"
-                f"text-transform:uppercase;letter-spacing:1px;"
-                f"border-bottom:1px solid {_BORDER};border-right:1px solid {_BORDER};"
-                f"width:20%;'>Matched Signal</th>"
-                f"<th style='padding:8px 12px;text-align:left;font-size:10px;"
-                f"font-weight:700;color:{c};font-family:monospace;"
-                f"text-transform:uppercase;letter-spacing:1px;"
-                f"border-bottom:1px solid {_BORDER};border-right:1px solid {_BORDER};"
-                f"width:35%;'>Extracted Insight</th>"
-                f"<th style='padding:8px 12px;text-align:left;font-size:10px;"
-                f"font-weight:700;color:{c};font-family:monospace;"
-                f"text-transform:uppercase;letter-spacing:1px;"
-                f"border-bottom:1px solid {_BORDER};"
-                f"width:45%;'>Supporting evidence from the source</th>"
-                f"</tr>"
-                f"</thead>"
-                f"<tbody>{rows_html}</tbody>"
-                f"</table></div>",
-                unsafe_allow_html=True,
-            )
- 
-        # for sig in group_sigs:
-        #     _render_single_signal(sig, level, tax, tc, doc_type)
+                    rows_html += (
+                        f"<tr style='background:{row_bg};'>"
+                        f"<td style='padding:10px 12px;border-bottom:1px solid {_BORDER};"
+                        f"border-right:1px solid {_BORDER};vertical-align:top;width:18%;'>"
+                        f"<div style='display:inline-flex;align-items:center;"
+                        f"background:{c}12;border:1px solid {c}30;border-radius:6px;"
+                        f"padding:3px 8px;font-size:11px;font-weight:700;"
+                        f"color:{c};font-family:monospace;white-space:nowrap;'>"
+                        f"🎯 {trigger}</div>"
+                        f"{conf_html}{unverified_marker}"
+                        f"</td>"
+                        f"<td style='padding:10px 12px;border-bottom:1px solid {_BORDER};"
+                        f"border-right:1px solid {_BORDER};vertical-align:top;width:15%;'>"
+                        f"<span style='display:inline-block;background:{rc_bg};"
+                        f"border:1px solid {rc_color}40;border-radius:20px;"
+                        f"padding:3px 10px;font-size:10px;font-weight:700;"
+                        f"color:{rc_color};font-family:monospace;white-space:nowrap;'>"
+                        f"{rc_label}</span>"
+                        f"</td>"
+                        f"<td style='padding:10px 12px;border-bottom:1px solid {_BORDER};"
+                        f"border-right:1px solid {_BORDER};vertical-align:top;width:32%;'>"
+                        f"<div style='font-size:12px;color:{_TXT};line-height:1.6;'>"
+                        f"{description}</div>"
+                        f"</td>"
+                        f"<td style='padding:10px 12px;border-bottom:1px solid {_BORDER};"
+                        f"vertical-align:top;width:35%;'>"
+                        f"<div style='font-size:11px;color:{_LBL};font-family:monospace;"
+                        f"font-style:italic;line-height:1.6;"
+                        f"background:{_BG2};border-left:3px solid {c}40;"
+                        f"padding:6px 10px;border-radius:0 4px 4px 0;"
+                        f"word-break:break-word;overflow-wrap:anywhere;'>"
+                        + (f"&ldquo;{support}&rdquo;" if support != "—" else "<span style='color:#94a3b8;'>no verbatim snippet</span>")
+                        + f"</div></td></tr>"
+                    )
+
+                st.markdown(
+                    f"<div style='border:1px solid {_BORDER};border-radius:8px;"
+                    f"overflow:hidden;margin-bottom:16px;'>"
+                    f"<table style='width:100%;border-collapse:collapse;'>"
+                    f"<thead><tr style='background:{c}08;'>"
+                    f"<th style='padding:8px 12px;text-align:left;font-size:10px;"
+                    f"font-weight:700;color:{c};font-family:monospace;"
+                    f"text-transform:uppercase;letter-spacing:1px;"
+                    f"border-bottom:1px solid {_BORDER};border-right:1px solid {_BORDER};"
+                    f"width:18%;'>Matched Signal</th>"
+                    f"<th style='padding:8px 12px;text-align:left;font-size:10px;"
+                    f"font-weight:700;color:{c};font-family:monospace;"
+                    f"text-transform:uppercase;letter-spacing:1px;"
+                    f"border-bottom:1px solid {_BORDER};border-right:1px solid {_BORDER};"
+                    f"width:15%;'>Risk Category</th>"
+                    f"<th style='padding:8px 12px;text-align:left;font-size:10px;"
+                    f"font-weight:700;color:{c};font-family:monospace;"
+                    f"text-transform:uppercase;letter-spacing:1px;"
+                    f"border-bottom:1px solid {_BORDER};border-right:1px solid {_BORDER};"
+                    f"width:32%;'>Extracted Insight</th>"
+                    f"<th style='padding:8px 12px;text-align:left;font-size:10px;"
+                    f"font-weight:700;color:{c};font-family:monospace;"
+                    f"text-transform:uppercase;letter-spacing:1px;"
+                    f"border-bottom:1px solid {_BORDER};width:35%;'>"
+                    f"Supporting evidence from the source</th>"
+                    f"</tr></thead>"
+                    f"<tbody>{rows_html}</tbody>"
+                    f"</table></div>",
+                    unsafe_allow_html=True,
+                )
 
 
 

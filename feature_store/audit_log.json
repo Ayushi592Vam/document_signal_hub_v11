@@ -4669,5 +4669,546 @@
     "total_rows": 1,
     "total_cols": 10,
     "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-11T19:10:40.085783",
+    "filename": "fnol2.txt",
+    "file_hash": "8be735012f47256d00ea7b70ec4ffc0b6125b542fb1193aaaff110ce190fa52a",
+    "sheets": [
+      "Transcript"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-11T19:10:40.165829",
+    "filename": "fnol2.txt",
+    "sheet": "Transcript",
+    "sheet_hash": "8be735012f47256d00ea7b70ec4ffc0b6125b542fb1193aaaff110ce190fa52a",
+    "claim_rows": 0,
+    "sheet_type": "TXT_TRANSCRIPT",
+    "total_rows": 0,
+    "total_cols": 0,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-11T19:13:11.704664",
+    "filename": "FNOL Transcript.txt",
+    "file_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "sheets": [
+      "Transcript"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-11T19:13:11.784962",
+    "filename": "FNOL Transcript.txt",
+    "sheet": "Transcript",
+    "sheet_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "claim_rows": 0,
+    "sheet_type": "TXT_TRANSCRIPT",
+    "total_rows": 0,
+    "total_cols": 0,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-11T19:15:54.121322",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-11T19:17:35.179743",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-11T19:18:16.465055",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-11T19:28:58.778968",
+    "filename": "FNOL Transcript.txt",
+    "file_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "sheets": [
+      "Transcript"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-11T19:28:58.881076",
+    "filename": "FNOL Transcript.txt",
+    "sheet": "Transcript",
+    "sheet_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "claim_rows": 0,
+    "sheet_type": "TXT_TRANSCRIPT",
+    "total_rows": 0,
+    "total_cols": 0,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-11T20:45:08.786218",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-11T20:45:58.077816",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-11T20:53:19.123273",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-11T20:53:59.615563",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T10:50:31.605805",
+    "filename": "Legal_Civil_Complaint.pdf",
+    "file_hash": "ba9f17bbeeb8cd2abac2aa85476c2244425c9955e7baa69bd773ebc7d3c9edd4",
+    "sheets": [
+      "Page 1",
+      "Page 2",
+      "Page 3",
+      "Page 4"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T10:51:06.799987",
+    "filename": "Legal_Civil_Complaint.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "48b1c7c0abbc566158f6c68039b81c67f579dc0b97848d0905b0427870f8ba0f",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 5,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T11:40:55.308971",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T11:41:36.056355",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
+  },
+  {
+    "event": "SHEET_LOADED_FROM_CACHE",
+    "timestamp": "2026-05-12T11:57:13.079356",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071"
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T11:57:48.946568",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T11:58:16.833357",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T12:15:54.392018",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T12:16:34.167390",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T12:20:41.643554",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T12:21:19.189380",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T12:31:13.141495",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T12:31:50.586042",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T12:32:57.467618",
+    "filename": "Legal_Civil_Complaint.pdf",
+    "file_hash": "ba9f17bbeeb8cd2abac2aa85476c2244425c9955e7baa69bd773ebc7d3c9edd4",
+    "sheets": [
+      "Page 1",
+      "Page 2",
+      "Page 3",
+      "Page 4"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T12:33:35.601549",
+    "filename": "Legal_Civil_Complaint.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "48b1c7c0abbc566158f6c68039b81c67f579dc0b97848d0905b0427870f8ba0f",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 5,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T12:45:36.077007",
+    "filename": "FNOL Transcript.txt",
+    "file_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "sheets": [
+      "Transcript"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T12:45:36.156917",
+    "filename": "FNOL Transcript.txt",
+    "sheet": "Transcript",
+    "sheet_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "claim_rows": 0,
+    "sheet_type": "TXT_TRANSCRIPT",
+    "total_rows": 0,
+    "total_cols": 0,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T14:31:04.344986",
+    "filename": "FNOL Transcript.txt",
+    "file_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "sheets": [
+      "Transcript"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T14:31:04.384363",
+    "filename": "FNOL Transcript.txt",
+    "sheet": "Transcript",
+    "sheet_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "claim_rows": 0,
+    "sheet_type": "TXT_TRANSCRIPT",
+    "total_rows": 0,
+    "total_cols": 0,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T14:38:27.470775",
+    "filename": "FNOL Transcript.txt",
+    "file_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "sheets": [
+      "Transcript"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T14:38:27.534131",
+    "filename": "FNOL Transcript.txt",
+    "sheet": "Transcript",
+    "sheet_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "claim_rows": 0,
+    "sheet_type": "TXT_TRANSCRIPT",
+    "total_rows": 0,
+    "total_cols": 0,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T14:40:03.118157",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T14:40:35.212677",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T14:45:19.566084",
+    "filename": "FNOL Transcript.txt",
+    "file_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "sheets": [
+      "Transcript"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T14:45:19.610450",
+    "filename": "FNOL Transcript.txt",
+    "sheet": "Transcript",
+    "sheet_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "claim_rows": 0,
+    "sheet_type": "TXT_TRANSCRIPT",
+    "total_rows": 0,
+    "total_cols": 0,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T14:46:02.694858",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T14:46:36.834297",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T14:48:06.936794",
+    "filename": "fnol2.txt",
+    "file_hash": "8be735012f47256d00ea7b70ec4ffc0b6125b542fb1193aaaff110ce190fa52a",
+    "sheets": [
+      "Transcript"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T14:48:06.995710",
+    "filename": "fnol2.txt",
+    "sheet": "Transcript",
+    "sheet_hash": "8be735012f47256d00ea7b70ec4ffc0b6125b542fb1193aaaff110ce190fa52a",
+    "claim_rows": 0,
+    "sheet_type": "TXT_TRANSCRIPT",
+    "total_rows": 0,
+    "total_cols": 0,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T14:56:10.395165",
+    "filename": "fnol2.txt",
+    "file_hash": "8be735012f47256d00ea7b70ec4ffc0b6125b542fb1193aaaff110ce190fa52a",
+    "sheets": [
+      "Transcript"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T14:56:10.438355",
+    "filename": "fnol2.txt",
+    "sheet": "Transcript",
+    "sheet_hash": "8be735012f47256d00ea7b70ec4ffc0b6125b542fb1193aaaff110ce190fa52a",
+    "claim_rows": 0,
+    "sheet_type": "TXT_TRANSCRIPT",
+    "total_rows": 0,
+    "total_cols": 0,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T14:57:45.931930",
+    "filename": "FNOL Transcript.txt",
+    "file_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "sheets": [
+      "Transcript"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T14:57:45.984914",
+    "filename": "FNOL Transcript.txt",
+    "sheet": "Transcript",
+    "sheet_hash": "084673364fcbb2749a4b4ff87324ccee29daafcb656628c9d12d5c1700ecc17b",
+    "claim_rows": 0,
+    "sheet_type": "TXT_TRANSCRIPT",
+    "total_rows": 0,
+    "total_cols": 0,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T14:58:40.487247",
+    "filename": "Legal_Civil_Complaint.pdf",
+    "file_hash": "ba9f17bbeeb8cd2abac2aa85476c2244425c9955e7baa69bd773ebc7d3c9edd4",
+    "sheets": [
+      "Page 1",
+      "Page 2",
+      "Page 3",
+      "Page 4"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T14:59:12.591172",
+    "filename": "Legal_Civil_Complaint.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "48b1c7c0abbc566158f6c68039b81c67f579dc0b97848d0905b0427870f8ba0f",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 5,
+    "col_renames": {}
+  },
+  {
+    "event": "FILE_INGESTED",
+    "timestamp": "2026-05-12T15:00:03.480143",
+    "filename": "Legal_Sample.pdf",
+    "file_hash": "890569c832e58254f08742bcae988b0e7160de87e87d54410c658d0744cce68d",
+    "sheets": [
+      "Page 1",
+      "Page 2"
+    ]
+  },
+  {
+    "event": "SHEET_PARSED",
+    "timestamp": "2026-05-12T15:00:35.099947",
+    "filename": "Legal_Sample.pdf",
+    "sheet": "Page 1",
+    "sheet_hash": "db402c1a56bf83b5077725a3c9d4186cb00570e7d403038f8672660cc6b81071",
+    "claim_rows": 1,
+    "sheet_type": "PDF",
+    "total_rows": 1,
+    "total_cols": 10,
+    "col_renames": {}
   }
 ]
