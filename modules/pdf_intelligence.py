@@ -1152,6 +1152,23 @@ def _keyword_extract_signals(full_text: str, doc_type: str) -> list[dict]:
         if len(snippet) > 800:
            snippet = snippet[:797] + "…"
  
+        # ── Negation check — skip if keyword appears in a negating context ──
+        _NEGATION_PATTERNS = [
+            r"i(?:'m| am) fine",
+            r"(?:no|not|without|denies?|denied|none|wasn't|was not) " + _re.escape(kw_lower),
+            r"no injuries",
+            r"not injured",
+            r"wasn't (?:in|hurt|injured)",
+            r"was not (?:in|hurt|injured)",
+        ]
+        _is_negated = any(
+            _re.search(pat, snippet.lower())
+            for pat in _NEGATION_PATTERNS
+        )
+        if _is_negated:
+            continue
+
+        
         signals.append({
             "type":            sig_type,
             "severity_level":  severity,
