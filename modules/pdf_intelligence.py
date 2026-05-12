@@ -1764,7 +1764,16 @@ def analyse_document(
         if not covered and k not in seen_sig_keys:
             seen_sig_keys.add(k)
             merged_signals.append(sig)
+    
+    _BLOCKED_TRIGGERS = {
+        "fine", "ok", "okay", "alright", "good", "well",
+        "normal", "nothing", "none", "no",
+}
 
+    merged_signals = [
+        s for s in merged_signals
+        if (s.get("trigger_matched") or "").lower().strip() not in _BLOCKED_TRIGGERS
+]
     signals = merged_signals
 
     if result_c:
