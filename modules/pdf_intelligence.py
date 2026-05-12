@@ -727,6 +727,10 @@ ANTI-HALLUCINATION RULES (unchanged):
   4. confidence: 0.90+ verbatim match, 0.70-0.89 equivalent phrase
   5. MULTIPLE SIGNALS ARE EXPECTED — a typical document should produce 3-8
   6. Do NOT stop scanning after finding the first signal per domain
+  "NEGATION RULE: If a keyword appears in a NEGATING context (e.g. 'I'm fine', "
+  "'no injuries', 'was not hurt', 'wasn't in the car'), do NOT fire a signal. "
+  "Absence of injury is NOT a severity signal. Only fire severity signals when "
+  "injury, damage, or loss is CONFIRMED, not denied or absent.\n"
 
 SEVERITY_CLASSIFICATION_RULES:
   Highly Severe — any of: death, fatality, wrongful death, catastrophic loss,
@@ -983,8 +987,7 @@ def _keyword_extract_signals(full_text: str, doc_type: str) -> list[dict]:
         ("severity", "Moderate",      "laceration",         "Laceration documented"),
         ("severity", "Moderate",      "sprain",             "Sprain injury documented"),
         ("severity", "Low",           "minor injury",       "Minor injury reported"),
-        ("severity", "Low",           "first aid",          "First aid treatment only"),
-        ("severity", "Low",           "no injuries",        "No injuries reported"),
+        
  
         # ── 2. LITIGATION RISK ─────────────────────────────────────────────
         ("legal_escalation", "Highly Severe", "criminal charges",   "Criminal charges referenced"),
@@ -1314,6 +1317,8 @@ RULES:
 - supporting_text must be verbatim from the document (max 800 chars)
 - If no new signals found, return empty signals array
 - Be specific — reference exact document language
+"- NEVER fire a severity signal when the claimant confirms they are uninjured "
+"(e.g. 'I'm fine', 'no injuries', 'wasn't in the car')\n"
  
 Return ONLY valid JSON:
 {{
