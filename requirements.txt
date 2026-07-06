@@ -12,3 +12,4 @@ azure-core
 azure-ai-documentintelligence
 docx2txt
 azure-ai-formrecognizer
+PyMuPDF
