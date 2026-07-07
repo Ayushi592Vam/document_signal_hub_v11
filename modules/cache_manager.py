@@ -3,23 +3,27 @@ modules/cache_manager.py
 Centralised cache-clearing utilities for the TPA Loss Run Parser.
 Handles all 4 cache layers:
   1. Streamlit session state (UI state, selections, modified values)
-  2. Feature store — parsed JSON cache (claims_json/)
-  3. Hash store     — file duplicate memory (hash_store.json)
-  4. Claim dup store — cross-upload claim change tracking (claim_dup_store.json)
+  2. Feature store — parsed JSON cache (claims_json/, still file-based)
+  3. Hash store     — file duplicate memory (now Delta table)
+  4. Claim dup store — cross-upload claim change tracking (now Delta table)
+  5. Audit log & export table — also now Delta tables
+
+NOTE: only the hash_store / claim_dup_store / audit_log / export_table
+functions changed storage backend. clear_session_cache() and
+clear_parsed_cache() are untouched -- claims_json/ parsed cache still
+lives on disk (a Volume once you point FEATURE_STORE_PATH there), it's
+a separate concern from the 4 JSON-store tables.
 """
 
 import glob
-import json
 import os
-import shutil
 
-from config.settings import (
-    FEATURE_STORE_PATH,
-    HASH_STORE_PATH,
-    CLAIM_DUP_STORE_PATH,
-    AUDIT_LOG_PATH,
-    JSON_EXPORT_TABLE_PATH,
-)
+from config.settings import FEATURE_STORE_PATH
+
+HASH_STORE_TABLE = "documentsignalhub.feature_store.hash_store"
+CLAIM_DUP_TABLE = "documentsignalhub.feature_store.claim_dup_store"
+AUDIT_LOG_TABLE = "documentsignalhub.feature_store.audit_log"
+EXPORT_TABLE = "documentsignalhub.feature_store.json_export_table"
 
 
 # ── Individual clear functions ────────────────────────────────────────────────
@@ -31,23 +35,19 @@ def clear_session_cache(session_state) -> int:
     Returns number of keys cleared.
     """
     KEEP_KEYS = {
-        # User preferences
         "conf_threshold", "use_conf_threshold", "active_schema",
         "schema_popup_target", "schema_popup_tab",
-        # File upload state — must survive cache clear so app doesn't crash
         "tmpdir", "last_uploaded", "sheet_names", "sheet_cache",
         "selected_idx", "focus_field",
         "current_file_hash", "sheet_hashes", "sheet_dup_info",
         "is_duplicate_file", "duplicate_first_seen", "duplicate_orig_name",
-        # Migration flags
         "claim_dup_migrated_v2",
     }
-    # Also keep custom_fields_* keys
     keys_to_del = [
         k for k in list(session_state.keys())
         if k not in KEEP_KEYS
         and not k.startswith("custom_fields_")
-        and not k.startswith("_fdi_")      # field dup index
+        and not k.startswith("_fdi_")
     ]
     for k in keys_to_del:
         del session_state[k]
@@ -58,6 +58,8 @@ def clear_parsed_cache() -> tuple[int, int]:
     """
     Deletes all cached parsed JSON files from feature_store/claims_json/.
     Returns (files_deleted, bytes_freed).
+    Unchanged from before -- still file-based, point FEATURE_STORE_PATH
+    at your Volume path once you migrate uploads there.
     """
     if not os.path.exists(FEATURE_STORE_PATH):
         return 0, 0
@@ -65,7 +67,6 @@ def clear_parsed_cache() -> tuple[int, int]:
     total_bytes = 0
     total_files = 0
 
-    # Delete all .json files inside claims_json/
     for fpath in glob.glob(os.path.join(FEATURE_STORE_PATH, "*.json")):
         try:
             total_bytes += os.path.getsize(fpath)
@@ -74,7 +75,6 @@ def clear_parsed_cache() -> tuple[int, int]:
         except Exception:
             pass
 
-    # Also clear the index
     index_path = os.path.join(FEATURE_STORE_PATH, "index.json")
     if os.path.exists(index_path):
         try:
@@ -88,70 +88,40 @@ def clear_parsed_cache() -> tuple[int, int]:
 
 
 def clear_hash_store() -> int:
-    """
-    Resets the file hash store so all files are treated as new.
-    Returns number of entries cleared.
-    """
+    """Resets the file hash store so all files are treated as new."""
     try:
-        if not os.path.exists(HASH_STORE_PATH):
-            return 0
-        with open(HASH_STORE_PATH) as f:
-            data = json.load(f)
-        count = len(data)
-        with open(HASH_STORE_PATH, "w") as f:
-            json.dump({}, f)
+        count = spark.table(HASH_STORE_TABLE).count()
+        spark.sql(f"DELETE FROM {HASH_STORE_TABLE}")
         return count
     except Exception:
         return 0
 
 
 def clear_claim_dup_store() -> int:
-    """
-    Resets the claim duplicate store.
-    Returns number of claim entries cleared.
-    """
+    """Resets the claim duplicate store."""
     try:
-        if not os.path.exists(CLAIM_DUP_STORE_PATH):
-            return 0
-        with open(CLAIM_DUP_STORE_PATH) as f:
-            data = json.load(f)
-        count = len(data)
-        with open(CLAIM_DUP_STORE_PATH, "w") as f:
-            json.dump({}, f)
+        count = spark.table(CLAIM_DUP_TABLE).count()
+        spark.sql(f"DELETE FROM {CLAIM_DUP_TABLE}")
         return count
     except Exception:
         return 0
 
 
 def clear_audit_log() -> int:
-    """
-    Clears the audit log. Returns number of entries removed.
-    """
+    """Clears the audit log."""
     try:
-        if not os.path.exists(AUDIT_LOG_PATH):
-            return 0
-        with open(AUDIT_LOG_PATH) as f:
-            data = json.load(f)
-        count = len(data)
-        with open(AUDIT_LOG_PATH, "w") as f:
-            json.dump([], f)
+        count = spark.table(AUDIT_LOG_TABLE).count()
+        spark.sql(f"DELETE FROM {AUDIT_LOG_TABLE}")
         return count
     except Exception:
         return 0
 
 
 def clear_export_table() -> int:
-    """
-    Clears the JSON export history table.
-    """
+    """Clears the JSON export history table."""
     try:
-        if not os.path.exists(JSON_EXPORT_TABLE_PATH):
-            return 0
-        with open(JSON_EXPORT_TABLE_PATH) as f:
-            data = json.load(f)
-        count = len(data)
-        with open(JSON_EXPORT_TABLE_PATH, "w") as f:
-            json.dump([], f)
+        count = spark.table(EXPORT_TABLE).count()
+        spark.sql(f"DELETE FROM {EXPORT_TABLE}")
         return count
     except Exception:
         return 0
@@ -165,7 +135,6 @@ def get_cache_stats() -> dict:
     """
     stats = {}
 
-    # Parsed cache
     parsed_files = glob.glob(os.path.join(FEATURE_STORE_PATH, "*.json"))
     parsed_bytes = sum(os.path.getsize(f) for f in parsed_files if os.path.exists(f))
     stats["parsed"] = {
@@ -173,35 +142,23 @@ def get_cache_stats() -> dict:
         "size_kb": round(parsed_bytes / 1024, 1),
     }
 
-    # Hash store
     try:
-        with open(HASH_STORE_PATH) as f:
-            hs = json.load(f)
-        stats["hash_store"] = {"entries": len(hs)}
+        stats["hash_store"] = {"entries": spark.table(HASH_STORE_TABLE).count()}
     except Exception:
         stats["hash_store"] = {"entries": 0}
 
-    # Claim dup store
     try:
-        with open(CLAIM_DUP_STORE_PATH) as f:
-            cd = json.load(f)
-        stats["claim_dups"] = {"entries": len(cd)}
+        stats["claim_dups"] = {"entries": spark.table(CLAIM_DUP_TABLE).count()}
     except Exception:
         stats["claim_dups"] = {"entries": 0}
 
-    # Audit log
     try:
-        with open(AUDIT_LOG_PATH) as f:
-            al = json.load(f)
-        stats["audit_log"] = {"entries": len(al)}
+        stats["audit_log"] = {"entries": spark.table(AUDIT_LOG_TABLE).count()}
     except Exception:
         stats["audit_log"] = {"entries": 0}
 
-    # Export table
     try:
-        with open(JSON_EXPORT_TABLE_PATH) as f:
-            et = json.load(f)
-        stats["export_table"] = {"entries": len(et)}
+        stats["export_table"] = {"entries": spark.table(EXPORT_TABLE).count()}
     except Exception:
         stats["export_table"] = {"entries": 0}
 
