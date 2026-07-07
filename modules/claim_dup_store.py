@@ -15,46 +15,53 @@ On the NEXT upload (same or different file) we re-check each Claim ID:
   - We persist the latest snapshot so the store
     always reflects the most-recently-seen version.
 
-STORE SCHEMA  (feature_store/claim_dup_store.json)
---------------------------------------------------
+STORE SCHEMA (documentsignalhub.feature_store.claim_dup_store)
+----------------------------------------------------------------
+Delta table with columns: dup_key, record (JSON string), last_updated.
+`record` holds the same shape as before:
 {
-  "<claim_id>": {
-    "claim_id":    "CLM-001",
-    "sheet_name":  "CGL Loss Run",
-    "filename":    "loss_run_v2.xlsx",
-    "ingested_at": "2024-01-15T10:30:00",
-    "fields": {
-      "Claim Number":   "CLM-001",
-      "Claimant Name":  "John Doe",
-      "Loss Date":      "2023-06-01",
-      ...
-    }
-  },
-  ...
+  "claim_id":    "CLM-001",
+  "sheet_name":  "CGL Loss Run",
+  "filename":    "loss_run_v2.xlsx",
+  "ingested_at": "2024-01-15T10:30:00",
+  "fields": { "Claim Number": "CLM-001", ... }
 }
+
+NOTE ON APPROACH: unlike audit_log (pure append), this store is loaded
+in full, mutated in memory, and saved back whole -- same pattern as the
+old JSON file. For demo-scale claim counts this is fine and keeps
+check_and_register_claims() below completely unchanged.
 """
 
 import datetime
 import json
-import os
 
-from config.settings import CLAIM_DUP_STORE_PATH
+from pyspark.sql import Row
+
 from modules.audit import _append_audit
+
+CLAIM_DUP_TABLE = "documentsignalhub.feature_store.claim_dup_store"
 
 
 # ── Persistence helpers ───────────────────────────────────────────────────────
 
 def _load_claim_dup_store() -> dict:
     try:
-        with open(CLAIM_DUP_STORE_PATH) as f:
-            return json.load(f)
+        df = spark.table(CLAIM_DUP_TABLE)
+        return {r.dup_key: json.loads(r.record) for r in df.collect()}
     except Exception:
         return {}
 
 
 def _save_claim_dup_store(store: dict) -> None:
-    with open(CLAIM_DUP_STORE_PATH, "w") as f:
-        json.dump(store, f, indent=2, ensure_ascii=False)
+    spark.sql(f"DELETE FROM {CLAIM_DUP_TABLE}")
+    if not store:
+        return
+    rows = [
+        Row(dup_key=k, record=json.dumps(v), last_updated=datetime.datetime.now())
+        for k, v in store.items()
+    ]
+    spark.createDataFrame(rows).write.format("delta").mode("append").saveAsTable(CLAIM_DUP_TABLE)
 
 
 # ── Snapshot builder ──────────────────────────────────────────────────────────
@@ -67,10 +74,8 @@ def _snapshot_claim(claim_data: dict, claim_id: str, sheet_name: str, filename: 
     """
     fields = {}
     for field, info in claim_data.items():
-        # Always snapshot raw extracted value only
         val = str(info.get("value", "")).strip()
         if not val:
-            # fallback only if value truly empty
             val = str(info.get("modified", "")).strip()
         if val:
             fields[field] = val
@@ -89,10 +94,7 @@ def _diff_snapshots(old_snap: dict, new_snap: dict) -> dict:
     """
     Compare two claim snapshots field by field.
     Returns a dict of changed fields:
-      {
-        "field_name": {"before": "old_val", "after": "new_val"},
-        ...
-      }
+      {"field_name": {"before": "old_val", "after": "new_val"}, ...}
     Only reports a change if BOTH before and after have real values,
     or if a previously non-empty field became empty (genuine deletion).
     Fields where the new value is empty but old also empty are skipped.
@@ -106,7 +108,6 @@ def _diff_snapshots(old_snap: dict, new_snap: dict) -> dict:
         old_val = old_fields.get(key, "").strip()
         new_val = new_fields.get(key, "").strip()
 
-        # Skip if both empty — nothing meaningful changed
         if not old_val and not new_val:
             continue
 
@@ -131,22 +132,7 @@ def check_and_register_claims(
       3. If yes  → record as duplicate with field diff
       4. Upsert  → store always has latest snapshot
 
-    Returns a result dict keyed by claim_id:
-    {
-      "CLM-001": {
-        "is_duplicate":  True,
-        "prev_filename": "old_file.xlsx",
-        "prev_sheet":    "Sheet1",
-        "prev_date":     "2024-01-10T...",
-        "changes":       {"Loss Date": {"before": "...", "after": "..."}},
-        "unchanged_count": 5,
-        "changed_count":   2,
-      },
-      "CLM-002": {
-        "is_duplicate": False,
-      },
-      ...
-    }
+    Returns a result dict keyed by claim_id (unchanged shape from before).
     """
     store   = _load_claim_dup_store()
     results = {}
@@ -161,12 +147,10 @@ def check_and_register_claims(
         if claim_id in store:
             old_snap = store[claim_id]
 
-            # Discard stale/corrupt snapshots where most fields are empty
             old_fields = old_snap.get("fields", {})
             non_empty  = sum(1 for v in old_fields.values() if str(v).strip())
             total_flds = len(old_fields)
             if total_flds == 0 or (non_empty / total_flds) < 0.3:
-                # Bad snapshot — treat as new, overwrite silently
                 store[claim_id] = new_snap
                 results[claim_id] = {"is_duplicate": False}
                 continue
@@ -197,7 +181,6 @@ def check_and_register_claims(
         else:
             results[claim_id] = {"is_duplicate": False}
 
-        # Always upsert latest snapshot
         store[claim_id] = new_snap
 
     _save_claim_dup_store(store)
