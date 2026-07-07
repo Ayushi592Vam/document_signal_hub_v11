@@ -1,9 +1,15 @@
 """
 modules/storage.py
 Feature store (parsed JSON cache), hash store, and SHA-256 helpers.
+
+MIGRATION NOTE: only _load_hash_store / _save_hash_store changed to use
+Delta (documentsignalhub.feature_store.hash_store). Everything else --
+the feature-store parsed cache and the validation-result cache -- stays
+file-based. Point FEATURE_STORE_PATH (config/settings.py) at
+/Volumes/documentsignalhub/raw_documents/files/ instead of a local path
+and this file needs no other changes.
 """
 
-import csv
 import datetime
 import hashlib
 import json
@@ -11,24 +17,56 @@ import os
 
 import openpyxl
 
-from config.settings import FEATURE_STORE_PATH, HASH_STORE_PATH
+from pyspark.sql import Row
+
+from config.settings import FEATURE_STORE_PATH
 from modules.normalization import normalize_str
 
+HASH_STORE_TABLE = "documentsignalhub.feature_store.hash_store"
 
-# ── Hash store ────────────────────────────────────────────────────────────────
+
+# ── Hash store (Delta-backed) ─────────────────────────────────────────────────
 
 def _load_hash_store() -> dict:
+    """Returns the full hash store as {file_hash: {filename, first_seen,
+    sheet_hashes}} -- same shape callers previously got from hash_store.json.
+    app2.py needs the whole dict (it iterates hash_store.items() to build
+    the cross-file sheet-dup index), so this loads everything, same as
+    claim_dup_store's approach."""
     try:
-        with open(HASH_STORE_PATH) as f:
-            return json.load(f)
+        df = spark.table(HASH_STORE_TABLE)
+        return {
+            r.file_hash: {
+                "filename": r.filename,
+                "first_seen": r.first_seen.isoformat(),
+                "sheet_hashes": json.loads(r.sheet_hashes) if r.sheet_hashes else {},
+            }
+            for r in df.collect()
+        }
     except Exception:
         return {}
 
 
 def _save_hash_store(store: dict) -> None:
-    with open(HASH_STORE_PATH, "w") as f:
-        json.dump(store, f, indent=2)
+    """Full overwrite -- matches the old json.dump(store, ...) behavior.
+    Called both after adding one new file (app2.py) and by
+    cache_manager.clear_hash_store()."""
+    spark.sql(f"DELETE FROM {HASH_STORE_TABLE}")
+    if not store:
+        return
+    rows = []
+    for file_hash, rec in store.items():
+        first_seen = rec.get("first_seen")
+        rows.append(Row(
+            file_hash=file_hash,
+            filename=rec.get("filename"),
+            first_seen=datetime.datetime.fromisoformat(first_seen) if first_seen else datetime.datetime.now(),
+            sheet_hashes=json.dumps(rec.get("sheet_hashes", {})),
+        ))
+    spark.createDataFrame(rows).write.format("delta").mode("append").saveAsTable(HASH_STORE_TABLE)
 
+
+# ── SHA-256 helpers (unchanged) ───────────────────────────────────────────────
 
 def _compute_file_sha256(path: str) -> str:
     h = hashlib.sha256()
@@ -41,7 +79,6 @@ def _compute_file_sha256(path: str) -> str:
 def _compute_sheet_sha256(file_path: str, sheet_name: str) -> str:
     ext = os.path.splitext(file_path)[1].lower()
 
-    # For non-Excel formats, hash the whole file bytes + sheet_name as the key
     if ext in (".csv", ".pdf", ".docx"):
         h = hashlib.sha256()
         h.update(sheet_name.encode("utf-8"))
@@ -60,7 +97,8 @@ def _compute_sheet_sha256(file_path: str, sheet_name: str) -> str:
     return h.hexdigest()
 
 
-# ── Feature store ─────────────────────────────────────────────────────────────
+# ── Feature store (unchanged -- file-based, just repoint FEATURE_STORE_PATH
+#    at your Volume in config/settings.py) ────────────────────────────────────
 
 def _load_from_feature_store(sheet_hash: str) -> dict | None:
     if not sheet_hash:
@@ -115,10 +153,9 @@ def _save_to_feature_store(sheet_hash: str, sheet_name: str, data: dict) -> str:
     return path
 
 
-# ── Validation result store ───────────────────────────────────────────────────
+# ── Validation result store (unchanged -- file-based) ─────────────────────────
 
 def _load_validation_result(doc_hash: str) -> dict | None:
-    """Load a cached validation result for the given document hash."""
     val_path = os.path.join(FEATURE_STORE_PATH, f"validation_{doc_hash}.json")
     if not os.path.exists(val_path):
         return None
@@ -130,10 +167,9 @@ def _load_validation_result(doc_hash: str) -> dict | None:
 
 
 def _save_validation_result(doc_hash: str, result: dict) -> None:
-    """Persist a validation result keyed by document hash."""
     val_path = os.path.join(FEATURE_STORE_PATH, f"validation_{doc_hash}.json")
     try:
         with open(val_path, "w") as f:
             json.dump(result, f, indent=2, ensure_ascii=False)
     except Exception:
-        pass    
+        pass
