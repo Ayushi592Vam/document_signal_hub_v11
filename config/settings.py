@@ -6,11 +6,11 @@ Application-wide constants and session-state defaults.
 import os
 
 # ── Feature-store paths ───────────────────────────────────────────────────────
-#FEATURE_STORE_PATH     = "feature_store/claims_json"
-FEATURE_STORE_PATH = "/Volumes/documentsignalhub/raw_documents/files"
-AUDIT_LOG_PATH         = "feature_store/audit_log.json"
-HASH_STORE_PATH        = "feature_store/hash_store.json"
-JSON_EXPORT_TABLE_PATH = "feature_store/json_export_table.json"
+FEATURE_STORE_PATH     = "/Volumes/documentsignalhub/raw_documents/files/feature_store"
+HASH_STORE_PATH         = "/Volumes/documentsignalhub/raw_documents/files/hash_store.json"
+CLAIM_DUP_STORE_PATH    = "/Volumes/documentsignalhub/raw_documents/files/claim_dup_store.json"
+AUDIT_LOG_PATH          = "/Volumes/documentsignalhub/raw_documents/files/audit_log.json"
+JSON_EXPORT_TABLE_PATH  = "/Volumes/documentsignalhub/raw_documents/files/json_export_table.json"
 
 # ── Claim-level duplicate store ───────────────────────────────────────────────
 CLAIM_DUP_STORE_PATH   = "feature_store/claim_dup_store.json"
