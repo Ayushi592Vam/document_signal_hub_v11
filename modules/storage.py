@@ -3,11 +3,11 @@ modules/storage.py
 Feature store (parsed JSON cache), hash store, and SHA-256 helpers.
 
 MIGRATION NOTE: only _load_hash_store / _save_hash_store changed to use
-Delta (documentsignalhub.feature_store.hash_store). Everything else --
-the feature-store parsed cache and the validation-result cache -- stays
-file-based. Point FEATURE_STORE_PATH (config/settings.py) at
-/Volumes/documentsignalhub/raw_documents/files/ instead of a local path
-and this file needs no other changes.
+the SQL Warehouse connector (documentsignalhub.feature_store.hash_store).
+Everything else -- the feature-store parsed cache and the validation-
+result cache -- stays file-based. Point FEATURE_STORE_PATH
+(config/settings.py) at /Volumes/documentsignalhub/raw_documents/files/
+instead of a local path and this file needs no other changes.
 """
 
 import datetime
@@ -17,53 +17,44 @@ import os
 
 import openpyxl
 
-from pyspark.sql import Row
-
 from config.settings import FEATURE_STORE_PATH
+from modules.db_connection import get_connection
 from modules.normalization import normalize_str
 
 HASH_STORE_TABLE = "documentsignalhub.feature_store.hash_store"
 
 
-# ── Hash store (Delta-backed) ─────────────────────────────────────────────────
+# ── Hash store (SQL Warehouse-backed) ─────────────────────────────────────────
 
 def _load_hash_store() -> dict:
-    """Returns the full hash store as {file_hash: {filename, first_seen,
-    sheet_hashes}} -- same shape callers previously got from hash_store.json.
-    app2.py needs the whole dict (it iterates hash_store.items() to build
-    the cross-file sheet-dup index), so this loads everything, same as
-    claim_dup_store's approach."""
-    try:
-        df = spark.table(HASH_STORE_TABLE)
-        return {
-            r.file_hash: {
-                "filename": r.filename,
-                "first_seen": r.first_seen.isoformat(),
-                "sheet_hashes": json.loads(r.sheet_hashes) if r.sheet_hashes else {},
+    store = {}
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(f"SELECT file_hash, filename, first_seen, sheet_hashes FROM {HASH_STORE_TABLE}")
+        for row in cur.fetchall():
+            store[row.file_hash] = {
+                "filename": row.filename,
+                "first_seen": row.first_seen.isoformat(),
+                "sheet_hashes": json.loads(row.sheet_hashes) if row.sheet_hashes else {},
             }
-            for r in df.collect()
-        }
-    except Exception:
-        return {}
+    return store
 
 
 def _save_hash_store(store: dict) -> None:
-    """Full overwrite -- matches the old json.dump(store, ...) behavior.
-    Called both after adding one new file (app2.py) and by
-    cache_manager.clear_hash_store()."""
-    spark.sql(f"DELETE FROM {HASH_STORE_TABLE}")
-    if not store:
-        return
-    rows = []
-    for file_hash, rec in store.items():
-        first_seen = rec.get("first_seen")
-        rows.append(Row(
-            file_hash=file_hash,
-            filename=rec.get("filename"),
-            first_seen=datetime.datetime.fromisoformat(first_seen) if first_seen else datetime.datetime.now(),
-            sheet_hashes=json.dumps(rec.get("sheet_hashes", {})),
-        ))
-    spark.createDataFrame(rows).write.format("delta").mode("append").saveAsTable(HASH_STORE_TABLE)
+    """Full overwrite -- matches the old json.dump(store, ...) behavior."""
+    with get_connection() as conn, conn.cursor() as cur:
+        cur.execute(f"DELETE FROM {HASH_STORE_TABLE}")
+        for file_hash, rec in store.items():
+            first_seen = rec.get("first_seen")
+            cur.execute(
+                f"INSERT INTO {HASH_STORE_TABLE} (file_hash, filename, first_seen, sheet_hashes) "
+                f"VALUES (:file_hash, :filename, :first_seen, :sheet_hashes)",
+                {
+                    "file_hash": file_hash,
+                    "filename": rec.get("filename"),
+                    "first_seen": datetime.datetime.fromisoformat(first_seen) if first_seen else datetime.datetime.now(),
+                    "sheet_hashes": json.dumps(rec.get("sheet_hashes", {})),
+                },
+            )
 
 
 # ── SHA-256 helpers (unchanged) ───────────────────────────────────────────────
