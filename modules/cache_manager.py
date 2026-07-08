@@ -3,42 +3,25 @@ modules/cache_manager.py
 Centralised cache-clearing utilities for the TPA Loss Run Parser.
 Handles all 4 cache layers:
   1. Streamlit session state (UI state, selections, modified values)
-  2. Feature store — parsed JSON cache (claims_json/, still file-based)
-  3. Hash store     — file duplicate memory (now via SQL Warehouse)
-  4. Claim dup store — cross-upload claim change tracking (now via SQL Warehouse)
-  5. Audit log & export table — also now via SQL Warehouse
+  2. Feature store — parsed JSON cache (claims_json/)
+  3. Hash store     — file duplicate memory (hash_store.json)
+  4. Claim dup store — cross-upload claim change tracking (claim_dup_store.json)
+
+MIGRATION NOTE: all paths now point at a Unity Catalog Volume instead of
+local disk (config/settings.py). No compute needed -- this is file I/O.
 """
 
 import glob
+import json
 import os
 
-from config.settings import FEATURE_STORE_PATH
-from modules.db_connection import get_connection
-
-HASH_STORE_TABLE = "documentsignalhub.feature_store.hash_store"
-CLAIM_DUP_TABLE = "documentsignalhub.feature_store.claim_dup_store"
-AUDIT_LOG_TABLE = "documentsignalhub.feature_store.audit_log"
-EXPORT_TABLE = "documentsignalhub.feature_store.json_export_table"
-
-
-def _count_and_clear(table: str) -> int:
-    try:
-        with get_connection() as conn, conn.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) AS c FROM {table}")
-            count = cur.fetchone().c
-            cur.execute(f"DELETE FROM {table}")
-        return count
-    except Exception:
-        return 0
-
-
-def _count(table: str) -> int:
-    try:
-        with get_connection() as conn, conn.cursor() as cur:
-            cur.execute(f"SELECT COUNT(*) AS c FROM {table}")
-            return cur.fetchone().c
-    except Exception:
-        return 0
+from config.settings import (
+    FEATURE_STORE_PATH,
+    HASH_STORE_PATH,
+    CLAIM_DUP_STORE_PATH,
+    AUDIT_LOG_PATH,
+    JSON_EXPORT_TABLE_PATH,
+)
 
 
 # ── Individual clear functions ────────────────────────────────────────────────
@@ -92,19 +75,59 @@ def clear_parsed_cache() -> tuple[int, int]:
 
 
 def clear_hash_store() -> int:
-    return _count_and_clear(HASH_STORE_TABLE)
+    try:
+        if not os.path.exists(HASH_STORE_PATH):
+            return 0
+        with open(HASH_STORE_PATH) as f:
+            data = json.load(f)
+        count = len(data)
+        with open(HASH_STORE_PATH, "w") as f:
+            json.dump({}, f)
+        return count
+    except Exception:
+        return 0
 
 
 def clear_claim_dup_store() -> int:
-    return _count_and_clear(CLAIM_DUP_TABLE)
+    try:
+        if not os.path.exists(CLAIM_DUP_STORE_PATH):
+            return 0
+        with open(CLAIM_DUP_STORE_PATH) as f:
+            data = json.load(f)
+        count = len(data)
+        with open(CLAIM_DUP_STORE_PATH, "w") as f:
+            json.dump({}, f)
+        return count
+    except Exception:
+        return 0
 
 
 def clear_audit_log() -> int:
-    return _count_and_clear(AUDIT_LOG_TABLE)
+    try:
+        if not os.path.exists(AUDIT_LOG_PATH):
+            return 0
+        with open(AUDIT_LOG_PATH) as f:
+            data = json.load(f)
+        count = len(data)
+        with open(AUDIT_LOG_PATH, "w") as f:
+            json.dump([], f)
+        return count
+    except Exception:
+        return 0
 
 
 def clear_export_table() -> int:
-    return _count_and_clear(EXPORT_TABLE)
+    try:
+        if not os.path.exists(JSON_EXPORT_TABLE_PATH):
+            return 0
+        with open(JSON_EXPORT_TABLE_PATH) as f:
+            data = json.load(f)
+        count = len(data)
+        with open(JSON_EXPORT_TABLE_PATH, "w") as f:
+            json.dump([], f)
+        return count
+    except Exception:
+        return 0
 
 
 # ── Stats helpers ─────────────────────────────────────────────────────────────
@@ -119,10 +142,33 @@ def get_cache_stats() -> dict:
         "size_kb": round(parsed_bytes / 1024, 1),
     }
 
-    stats["hash_store"] = {"entries": _count(HASH_STORE_TABLE)}
-    stats["claim_dups"] = {"entries": _count(CLAIM_DUP_TABLE)}
-    stats["audit_log"] = {"entries": _count(AUDIT_LOG_TABLE)}
-    stats["export_table"] = {"entries": _count(EXPORT_TABLE)}
+    try:
+        with open(HASH_STORE_PATH) as f:
+            hs = json.load(f)
+        stats["hash_store"] = {"entries": len(hs)}
+    except Exception:
+        stats["hash_store"] = {"entries": 0}
+
+    try:
+        with open(CLAIM_DUP_STORE_PATH) as f:
+            cd = json.load(f)
+        stats["claim_dups"] = {"entries": len(cd)}
+    except Exception:
+        stats["claim_dups"] = {"entries": 0}
+
+    try:
+        with open(AUDIT_LOG_PATH) as f:
+            al = json.load(f)
+        stats["audit_log"] = {"entries": len(al)}
+    except Exception:
+        stats["audit_log"] = {"entries": 0}
+
+    try:
+        with open(JSON_EXPORT_TABLE_PATH) as f:
+            et = json.load(f)
+        stats["export_table"] = {"entries": len(et)}
+    except Exception:
+        stats["export_table"] = {"entries": 0}
 
     return stats
 
