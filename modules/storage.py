@@ -2,12 +2,11 @@
 modules/storage.py
 Feature store (parsed JSON cache), hash store, and SHA-256 helpers.
 
-MIGRATION NOTE: only _load_hash_store / _save_hash_store changed to use
-the SQL Warehouse connector (documentsignalhub.feature_store.hash_store).
-Everything else -- the feature-store parsed cache and the validation-
-result cache -- stays file-based. Point FEATURE_STORE_PATH
-(config/settings.py) at /Volumes/documentsignalhub/raw_documents/files/
-instead of a local path and this file needs no other changes.
+MIGRATION NOTE: everything in this file is file-based, pointed at Unity
+Catalog Volume paths instead of local disk. Set FEATURE_STORE_PATH and
+HASH_STORE_PATH (config/settings.py) to paths under
+/Volumes/documentsignalhub/raw_documents/files/ -- no compute needed for
+any of this, it's all just file reads/writes.
 """
 
 import datetime
@@ -17,47 +16,24 @@ import os
 
 import openpyxl
 
-from config.settings import FEATURE_STORE_PATH
-from modules.db_connection import get_connection
+from config.settings import FEATURE_STORE_PATH, HASH_STORE_PATH
 from modules.normalization import normalize_str
 
-HASH_STORE_TABLE = "documentsignalhub.feature_store.hash_store"
 
-
-# ── Hash store (SQL Warehouse-backed) ─────────────────────────────────────────
+# ── Hash store ────────────────────────────────────────────────────────────────
 
 def _load_hash_store() -> dict:
-    store = {}
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(f"SELECT file_hash, filename, first_seen, sheet_hashes FROM {HASH_STORE_TABLE}")
-        for row in cur.fetchall():
-            store[row.file_hash] = {
-                "filename": row.filename,
-                "first_seen": row.first_seen.isoformat(),
-                "sheet_hashes": json.loads(row.sheet_hashes) if row.sheet_hashes else {},
-            }
-    return store
+    try:
+        with open(HASH_STORE_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 def _save_hash_store(store: dict) -> None:
-    """Full overwrite -- matches the old json.dump(store, ...) behavior."""
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(f"DELETE FROM {HASH_STORE_TABLE}")
-        for file_hash, rec in store.items():
-            first_seen = rec.get("first_seen")
-            cur.execute(
-                f"INSERT INTO {HASH_STORE_TABLE} (file_hash, filename, first_seen, sheet_hashes) "
-                f"VALUES (:file_hash, :filename, :first_seen, :sheet_hashes)",
-                {
-                    "file_hash": file_hash,
-                    "filename": rec.get("filename"),
-                    "first_seen": datetime.datetime.fromisoformat(first_seen) if first_seen else datetime.datetime.now(),
-                    "sheet_hashes": json.dumps(rec.get("sheet_hashes", {})),
-                },
-            )
+    with open(HASH_STORE_PATH, "w") as f:
+        json.dump(store, f, indent=2)
 
-
-# ── SHA-256 helpers (unchanged) ───────────────────────────────────────────────
 
 def _compute_file_sha256(path: str) -> str:
     h = hashlib.sha256()
@@ -88,8 +64,7 @@ def _compute_sheet_sha256(file_path: str, sheet_name: str) -> str:
     return h.hexdigest()
 
 
-# ── Feature store (unchanged -- file-based, just repoint FEATURE_STORE_PATH
-#    at your Volume in config/settings.py) ────────────────────────────────────
+# ── Feature store ─────────────────────────────────────────────────────────────
 
 def _load_from_feature_store(sheet_hash: str) -> dict | None:
     if not sheet_hash:
@@ -144,7 +119,7 @@ def _save_to_feature_store(sheet_hash: str, sheet_name: str, data: dict) -> str:
     return path
 
 
-# ── Validation result store (unchanged -- file-based) ─────────────────────────
+# ── Validation result store ───────────────────────────────────────────────────
 
 def _load_validation_result(doc_hash: str) -> dict | None:
     val_path = os.path.join(FEATURE_STORE_PATH, f"validation_{doc_hash}.json")
