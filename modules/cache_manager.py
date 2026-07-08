@@ -4,21 +4,16 @@ Centralised cache-clearing utilities for the TPA Loss Run Parser.
 Handles all 4 cache layers:
   1. Streamlit session state (UI state, selections, modified values)
   2. Feature store — parsed JSON cache (claims_json/, still file-based)
-  3. Hash store     — file duplicate memory (now Delta table)
-  4. Claim dup store — cross-upload claim change tracking (now Delta table)
-  5. Audit log & export table — also now Delta tables
-
-NOTE: only the hash_store / claim_dup_store / audit_log / export_table
-functions changed storage backend. clear_session_cache() and
-clear_parsed_cache() are untouched -- claims_json/ parsed cache still
-lives on disk (a Volume once you point FEATURE_STORE_PATH there), it's
-a separate concern from the 4 JSON-store tables.
+  3. Hash store     — file duplicate memory (now via SQL Warehouse)
+  4. Claim dup store — cross-upload claim change tracking (now via SQL Warehouse)
+  5. Audit log & export table — also now via SQL Warehouse
 """
 
 import glob
 import os
 
 from config.settings import FEATURE_STORE_PATH
+from modules.db_connection import get_connection
 
 HASH_STORE_TABLE = "documentsignalhub.feature_store.hash_store"
 CLAIM_DUP_TABLE = "documentsignalhub.feature_store.claim_dup_store"
@@ -26,14 +21,29 @@ AUDIT_LOG_TABLE = "documentsignalhub.feature_store.audit_log"
 EXPORT_TABLE = "documentsignalhub.feature_store.json_export_table"
 
 
+def _count_and_clear(table: str) -> int:
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) AS c FROM {table}")
+            count = cur.fetchone().c
+            cur.execute(f"DELETE FROM {table}")
+        return count
+    except Exception:
+        return 0
+
+
+def _count(table: str) -> int:
+    try:
+        with get_connection() as conn, conn.cursor() as cur:
+            cur.execute(f"SELECT COUNT(*) AS c FROM {table}")
+            return cur.fetchone().c
+    except Exception:
+        return 0
+
+
 # ── Individual clear functions ────────────────────────────────────────────────
 
 def clear_session_cache(session_state) -> int:
-    """
-    Clears all runtime UI state from st.session_state.
-    Preserves user preferences (conf_threshold, active_schema etc.).
-    Returns number of keys cleared.
-    """
     KEEP_KEYS = {
         "conf_threshold", "use_conf_threshold", "active_schema",
         "schema_popup_target", "schema_popup_tab",
@@ -55,12 +65,6 @@ def clear_session_cache(session_state) -> int:
 
 
 def clear_parsed_cache() -> tuple[int, int]:
-    """
-    Deletes all cached parsed JSON files from feature_store/claims_json/.
-    Returns (files_deleted, bytes_freed).
-    Unchanged from before -- still file-based, point FEATURE_STORE_PATH
-    at your Volume path once you migrate uploads there.
-    """
     if not os.path.exists(FEATURE_STORE_PATH):
         return 0, 0
 
@@ -88,51 +92,24 @@ def clear_parsed_cache() -> tuple[int, int]:
 
 
 def clear_hash_store() -> int:
-    """Resets the file hash store so all files are treated as new."""
-    try:
-        count = spark.table(HASH_STORE_TABLE).count()
-        spark.sql(f"DELETE FROM {HASH_STORE_TABLE}")
-        return count
-    except Exception:
-        return 0
+    return _count_and_clear(HASH_STORE_TABLE)
 
 
 def clear_claim_dup_store() -> int:
-    """Resets the claim duplicate store."""
-    try:
-        count = spark.table(CLAIM_DUP_TABLE).count()
-        spark.sql(f"DELETE FROM {CLAIM_DUP_TABLE}")
-        return count
-    except Exception:
-        return 0
+    return _count_and_clear(CLAIM_DUP_TABLE)
 
 
 def clear_audit_log() -> int:
-    """Clears the audit log."""
-    try:
-        count = spark.table(AUDIT_LOG_TABLE).count()
-        spark.sql(f"DELETE FROM {AUDIT_LOG_TABLE}")
-        return count
-    except Exception:
-        return 0
+    return _count_and_clear(AUDIT_LOG_TABLE)
 
 
 def clear_export_table() -> int:
-    """Clears the JSON export history table."""
-    try:
-        count = spark.table(EXPORT_TABLE).count()
-        spark.sql(f"DELETE FROM {EXPORT_TABLE}")
-        return count
-    except Exception:
-        return 0
+    return _count_and_clear(EXPORT_TABLE)
 
 
 # ── Stats helpers ─────────────────────────────────────────────────────────────
 
 def get_cache_stats() -> dict:
-    """
-    Returns current size/count for each cache layer.
-    """
     stats = {}
 
     parsed_files = glob.glob(os.path.join(FEATURE_STORE_PATH, "*.json"))
@@ -142,25 +119,10 @@ def get_cache_stats() -> dict:
         "size_kb": round(parsed_bytes / 1024, 1),
     }
 
-    try:
-        stats["hash_store"] = {"entries": spark.table(HASH_STORE_TABLE).count()}
-    except Exception:
-        stats["hash_store"] = {"entries": 0}
-
-    try:
-        stats["claim_dups"] = {"entries": spark.table(CLAIM_DUP_TABLE).count()}
-    except Exception:
-        stats["claim_dups"] = {"entries": 0}
-
-    try:
-        stats["audit_log"] = {"entries": spark.table(AUDIT_LOG_TABLE).count()}
-    except Exception:
-        stats["audit_log"] = {"entries": 0}
-
-    try:
-        stats["export_table"] = {"entries": spark.table(EXPORT_TABLE).count()}
-    except Exception:
-        stats["export_table"] = {"entries": 0}
+    stats["hash_store"] = {"entries": _count(HASH_STORE_TABLE)}
+    stats["claim_dups"] = {"entries": _count(CLAIM_DUP_TABLE)}
+    stats["audit_log"] = {"entries": _count(AUDIT_LOG_TABLE)}
+    stats["export_table"] = {"entries": _count(EXPORT_TABLE)}
 
     return stats
 
