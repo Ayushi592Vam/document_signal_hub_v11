@@ -6,49 +6,37 @@ Claim-level duplicate detection across uploads.
 HOW IT WORKS
 ------------
 Every time a sheet is parsed, we take a snapshot of each claim keyed by
-its Claim ID.  The snapshot stores every field value at the time of
-ingestion.
-
-On the NEXT upload (same or different file) we re-check each Claim ID:
+its Claim ID. On the NEXT upload we re-check each Claim ID:
   - If the Claim ID already exists in the store   → DUPLICATE CLAIM
   - We diff the old field values vs the new ones  → shows Before / After
-  - We persist the latest snapshot so the store
-    always reflects the most-recently-seen version.
+  - We persist the latest snapshot so the store always reflects the
+    most-recently-seen version.
 
-STORE SCHEMA (documentsignalhub.feature_store.claim_dup_store)
-----------------------------------------------------------------
-Delta table with columns: dup_key, record (JSON string), last_updated.
+MIGRATION NOTE: no longer Delta/SQL-backed. Point CLAIM_DUP_STORE_PATH
+(config/settings.py) at a Volume path -- otherwise identical to the
+original local-disk version.
 """
 
 import datetime
 import json
 
+from config.settings import CLAIM_DUP_STORE_PATH
 from modules.audit import _append_audit
-from modules.db_connection import get_connection
-
-CLAIM_DUP_TABLE = "documentsignalhub.feature_store.claim_dup_store"
 
 
 # ── Persistence helpers ───────────────────────────────────────────────────────
 
 def _load_claim_dup_store() -> dict:
-    store = {}
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(f"SELECT dup_key, record FROM {CLAIM_DUP_TABLE}")
-        for row in cur.fetchall():
-            store[row.dup_key] = json.loads(row.record)
-    return store
+    try:
+        with open(CLAIM_DUP_STORE_PATH) as f:
+            return json.load(f)
+    except Exception:
+        return {}
 
 
 def _save_claim_dup_store(store: dict) -> None:
-    with get_connection() as conn, conn.cursor() as cur:
-        cur.execute(f"DELETE FROM {CLAIM_DUP_TABLE}")
-        for k, v in store.items():
-            cur.execute(
-                f"INSERT INTO {CLAIM_DUP_TABLE} (dup_key, record, last_updated) "
-                f"VALUES (:dup_key, :record, :last_updated)",
-                {"dup_key": k, "record": json.dumps(v), "last_updated": datetime.datetime.now()},
-            )
+    with open(CLAIM_DUP_STORE_PATH, "w") as f:
+        json.dump(store, f, indent=2, ensure_ascii=False)
 
 
 # ── Snapshot builder ──────────────────────────────────────────────────────────
