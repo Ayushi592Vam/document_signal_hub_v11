@@ -33,6 +33,18 @@ _D_BLU_BG = "#e8f0fe"
 _D_PUR  = "#6b3fd4"
 
 
+# ── Version-safe st.image() wrapper ───────────────────────────────────────────
+# Streamlit added `use_container_width` to st.image() in v1.28.0. Older
+# environments (e.g. some Databricks deployments) only support the deprecated
+# `use_column_width` kwarg. This wrapper tries the modern kwarg first and
+# transparently falls back so the same code works on both.
+def _st_image(img, caption=None):
+    try:
+        st.image(img, use_container_width=True, caption=caption)
+    except TypeError:
+        st.image(img, use_column_width=True, caption=caption)
+
+
 # ── Eye popup ─────────────────────────────────────────────────────────────────
 
 @st.dialog("Cell View", width="large")
@@ -127,8 +139,7 @@ def show_eye_popup(field: str, info: dict, excel_path: str, sheet_name: str) -> 
                         st.error(f"PDF render error: {e}")
                 full_img, cropped_img = st.session_state.get(_pdf_cache_key, (None, None))
             if cropped_img is not None:
-                st.image(cropped_img, use_container_width=True,
-                         caption=f"Field '{field}' highlighted on PDF Page {target_row}")
+                _st_image(cropped_img, caption=f"Field '{field}' highlighted on PDF Page {target_row}")
                 if source_text:
                     st.markdown(f"<div style='{_src_box_style}'>{source_text}</div>",
                                 unsafe_allow_html=True)
@@ -153,8 +164,7 @@ def show_eye_popup(field: str, info: dict, excel_path: str, sheet_name: str) -> 
                         st.session_state[_pdf_cache_key] = (None, None)
                 full_img, cropped_img = st.session_state.get(_pdf_cache_key, (None, None))
             if cropped_img is not None:
-                st.image(cropped_img, use_container_width=True,
-                         caption=f"Field '{field}' highlighted on PDF Page {target_row}")
+                _st_image(cropped_img, caption=f"Field '{field}' highlighted on PDF Page {target_row}")
             else:
                 st.markdown(
                     f"<div style='{_src_box_style}line-height:1.6;margin-bottom:8px;'>"
@@ -285,9 +295,8 @@ def show_eye_popup(field: str, info: dict, excel_path: str, sheet_name: str) -> 
                     cropped = img
 
                 col_letter = get_column_letter(target_col)
-                st.image(
+                _st_image(
                     cropped,
-                    use_container_width=True,
                     caption=f"Cell {col_letter}{target_row} highlighted in yellow",
                 )
 
@@ -378,8 +387,7 @@ def show_eye_popup(field: str, info: dict, excel_path: str, sheet_name: str) -> 
         draw.rectangle([x1+3, y1+3, x2-3, y2-3], outline=(255, 255, 255, 160), width=1)
         cropped, _, _, _, _ = crop_context(img, x1, y1, x2, y2, pad_x=300, pad_y=200)
         col_letter = get_column_letter(target_col)
-        st.image(cropped, use_container_width=True,
-                 caption=f"Cell {col_letter}{target_row} highlighted in yellow")
+        _st_image(cropped, caption=f"Cell {col_letter}{target_row} highlighted in yellow")
     except Exception as e:
         st.error(f"Rendering error: {e}")
 
