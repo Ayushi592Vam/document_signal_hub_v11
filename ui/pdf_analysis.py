@@ -3342,12 +3342,13 @@ def _render_entities_tab(
             
 
         with c2:
+            _extracted_html = extracted if extracted else f'<span style="color:{_LBL2};">—</span>'
             st.markdown(
                 f"<div style='font-size:12px;color:{_TXT};font-family:monospace;"
                 f"background:{_BG2};border:1px solid {_BORDER};"
                 f"padding:7px 10px;border-radius:5px;min-height:34px;"
                 f"line-height:1.5;white-space:pre-wrap;word-break:break-word;'>"
-                f"{extracted if extracted else f'<span style=\"color:{_LBL2};\">—</span>'}"
+                f"{_extracted_html}"
                 f"</div>",
                 unsafe_allow_html=True,
             )
