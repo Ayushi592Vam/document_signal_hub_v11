@@ -2,25 +2,20 @@
 modules/json_export_table.py
 Tracks every generated JSON export (upsert by filename+sheet+type).
 
-MIGRATION NOTE: file-based against a Volume path
-(JSON_EXPORT_TABLE_PATH in config/settings.py) -- no compute needed.
+MIGRATION NOTE: persistence now goes through modules/volume_io.py
+(Files API) instead of plain open().
 """
 
-import json
 from config.settings import JSON_EXPORT_TABLE_PATH
+from modules.volume_io import load_json, save_json
 
 
 def _load_json_export_table() -> list:
-    try:
-        with open(JSON_EXPORT_TABLE_PATH) as f:
-            return json.load(f)
-    except Exception:
-        return []
+    return load_json(JSON_EXPORT_TABLE_PATH, default=[])
 
 
 def _save_json_export_table(table: list) -> None:
-    with open(JSON_EXPORT_TABLE_PATH, "w") as f:
-        json.dump(table, f, indent=2)
+    save_json(JSON_EXPORT_TABLE_PATH, table)
 
 
 def _append_json_export(entry: dict) -> None:
