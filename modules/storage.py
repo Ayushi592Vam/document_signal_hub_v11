@@ -2,37 +2,33 @@
 modules/storage.py
 Feature store (parsed JSON cache), hash store, and SHA-256 helpers.
 
-MIGRATION NOTE: everything in this file is file-based, pointed at Unity
-Catalog Volume paths instead of local disk. Set FEATURE_STORE_PATH and
-HASH_STORE_PATH (config/settings.py) to paths under
-/Volumes/documentsignalhub/raw_documents/files/ -- no compute needed for
-any of this, it's all just file reads/writes.
+MIGRATION NOTE: all persistence now goes through modules/volume_io.py
+(Databricks Files API) instead of plain open() -- see that module for
+why open()/os.makedirs() against /Volumes doesn't work reliably inside
+a Databricks App. _compute_file_sha256 / _compute_sheet_sha256 are
+unchanged since they read the uploaded file from local temp storage
+(st.session_state.tmpdir), not the Volume.
 """
 
 import datetime
 import hashlib
-import json
 import os
 
 import openpyxl
 
 from config.settings import FEATURE_STORE_PATH, HASH_STORE_PATH
 from modules.normalization import normalize_str
+from modules.volume_io import load_json, save_json
 
 
 # ── Hash store ────────────────────────────────────────────────────────────────
 
 def _load_hash_store() -> dict:
-    try:
-        with open(HASH_STORE_PATH) as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    return load_json(HASH_STORE_PATH, default={})
 
 
 def _save_hash_store(store: dict) -> None:
-    with open(HASH_STORE_PATH, "w") as f:
-        json.dump(store, f, indent=2)
+    save_json(HASH_STORE_PATH, store)
 
 
 def _compute_file_sha256(path: str) -> str:
@@ -69,27 +65,22 @@ def _compute_sheet_sha256(file_path: str, sheet_name: str) -> str:
 def _load_from_feature_store(sheet_hash: str) -> dict | None:
     if not sheet_hash:
         return None
-    index_path = os.path.join(FEATURE_STORE_PATH, "index.json")
-    if not os.path.exists(index_path):
+    index_path = f"{FEATURE_STORE_PATH}/index.json"
+    index = load_json(index_path, default=None)
+    if not index:
         return None
-    try:
-        with open(index_path) as f:
-            index = json.load(f)
-        entry = index.get(sheet_hash)
-        if not entry:
-            return None
-        data_path = entry.get("path")
-        if not data_path or not os.path.exists(data_path):
-            return None
-        with open(data_path) as f:
-            return json.load(f)
-    except Exception:
+    entry = index.get(sheet_hash)
+    if not entry:
         return None
+    data_path = entry.get("path")
+    if not data_path:
+        return None
+    return load_json(data_path, default=None)
 
 
 def _save_to_feature_store(sheet_hash: str, sheet_name: str, data: dict) -> str:
     ts   = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    path = os.path.join(FEATURE_STORE_PATH, f"{sheet_name}_{ts}.json")
+    path = f"{FEATURE_STORE_PATH}/{sheet_name}_{ts}.json"
 
     def _san(obj):
         if isinstance(obj, dict):
@@ -100,42 +91,26 @@ def _save_to_feature_store(sheet_hash: str, sheet_name: str, data: dict) -> str:
             return normalize_str(obj)
         return obj
 
-    with open(path, "w") as f:
-        json.dump(_san(data), f, indent=2, ensure_ascii=False)
+    save_json(path, _san(data))
 
-    index_path = os.path.join(FEATURE_STORE_PATH, "index.json")
-    try:
-        with open(index_path) as f:
-            index = json.load(f)
-    except Exception:
-        index = {}
+    index_path = f"{FEATURE_STORE_PATH}/index.json"
+    index = load_json(index_path, default={})
     index[sheet_hash] = {
         "path":       path,
         "sheet_name": sheet_name,
         "saved_at":   datetime.datetime.now().isoformat(),
     }
-    with open(index_path, "w") as f:
-        json.dump(index, f, indent=2)
+    save_json(index_path, index)
     return path
 
 
 # ── Validation result store ───────────────────────────────────────────────────
 
 def _load_validation_result(doc_hash: str) -> dict | None:
-    val_path = os.path.join(FEATURE_STORE_PATH, f"validation_{doc_hash}.json")
-    if not os.path.exists(val_path):
-        return None
-    try:
-        with open(val_path) as f:
-            return json.load(f)
-    except Exception:
-        return None
+    val_path = f"{FEATURE_STORE_PATH}/validation_{doc_hash}.json"
+    return load_json(val_path, default=None)
 
 
 def _save_validation_result(doc_hash: str, result: dict) -> None:
-    val_path = os.path.join(FEATURE_STORE_PATH, f"validation_{doc_hash}.json")
-    try:
-        with open(val_path, "w") as f:
-            json.dump(result, f, indent=2, ensure_ascii=False)
-    except Exception:
-        pass
+    val_path = f"{FEATURE_STORE_PATH}/validation_{doc_hash}.json"
+    save_json(val_path, result)
