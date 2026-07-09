@@ -12,31 +12,25 @@ its Claim ID. On the NEXT upload we re-check each Claim ID:
   - We persist the latest snapshot so the store always reflects the
     most-recently-seen version.
 
-MIGRATION NOTE: no longer Delta/SQL-backed. Point CLAIM_DUP_STORE_PATH
-(config/settings.py) at a Volume path -- otherwise identical to the
-original local-disk version.
+MIGRATION NOTE: persistence now goes through modules/volume_io.py (Files
+API) instead of plain open() -- see that module for why.
 """
 
 import datetime
-import json
 
 from config.settings import CLAIM_DUP_STORE_PATH
 from modules.audit import _append_audit
+from modules.volume_io import load_json, save_json
 
 
 # ── Persistence helpers ───────────────────────────────────────────────────────
 
 def _load_claim_dup_store() -> dict:
-    try:
-        with open(CLAIM_DUP_STORE_PATH) as f:
-            return json.load(f)
-    except Exception:
-        return {}
+    return load_json(CLAIM_DUP_STORE_PATH, default={})
 
 
 def _save_claim_dup_store(store: dict) -> None:
-    with open(CLAIM_DUP_STORE_PATH, "w") as f:
-        json.dump(store, f, indent=2, ensure_ascii=False)
+    save_json(CLAIM_DUP_STORE_PATH, store)
 
 
 # ── Snapshot builder ──────────────────────────────────────────────────────────
