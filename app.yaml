@@ -1,1 +1,29 @@
-command: ["streamlit", "run", "app2.py"]
+command: ['streamlit', 'run', 'app2.py']
+env:
+  # ── Secrets (pulled from Databricks secret scope) ──
+  - name: 'OPENAI_DEPLOYMENT_ENDPOINT'
+    valueFrom: openai-endpoint
+  - name: 'OPENAI_API_KEY'
+    valueFrom: openai-api-key
+  - name: 'OPENAI_DEPLOYMENT_ENDPOINT_ENHANCED'
+    valueFrom: openai-endpoint-enhanced
+  - name: 'OPENAI_API_KEY_ENHANCED'
+    valueFrom: openai-api-key-enhanced
+  - name: 'AZURE_DI_ENDPOINT'
+    valueFrom: azure-di-endpoint
+  - name: 'AZURE_DI_KEY'
+    valueFrom: azure-di-key
+
+  # ── Plain, non-sensitive config (safe to hardcode) ──
+  - name: 'OPENAI_API_VERSION'
+    value: '2025-04-01-preview'
+  - name: 'OPENAI_DEPLOYMENT_NAME'
+    value: 'gpt-4o-mini'
+  - name: 'OPENAI_MODEL_NAME'
+    value: 'gpt-4o-mini'
+  - name: 'OPENAI_DEPLOYMENT_NAME_ENHANCED'
+    value: 'gpt-5.4'
+  - name: 'OPENAI_MODEL_NAME_ENHANCED'
+    value: 'gpt-5.4'
+  - name: 'PDF_INTEL_DEBUG'
+    value: '1'
