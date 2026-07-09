@@ -781,6 +781,13 @@ def _card(content: str, border_color: str = _BORDER, bg: str = _BG) -> str:
         f"border-radius:8px;padding:14px 16px;margin-bottom:10px;'>{content}</div>"
     )
 
+def _safe_image(data, **kwargs) -> None:
+    """st.image() wrapper that works across Streamlit versions."""
+    try:
+        st.image(data, use_container_width=True, **kwargs)
+    except TypeError:
+        st.image(data, use_column_width=True, **kwargs)
+
 
 def _source_snippet(source_text: str) -> str:
     if not source_text:
@@ -2527,12 +2534,12 @@ def _render_bbox_content(field_name: str, field_info: dict, pdf_path: str) -> No
                 unsafe_allow_html=True,
             )
 
-        st.image(pix_zoom.tobytes("png"), use_container_width=True)
+        
+        _safe_image(pix_zoom.tobytes("png"))
 
         with st.expander("📄 Full Page View"):
             pix_full = page.get_pixmap(matrix=fitz.Matrix(1.5, 1.5))
-            st.image(pix_full.tobytes("png"), use_container_width=True)
-
+            _safe_image(pix_full.tobytes("png"))
         doc.close()
 
     except ImportError:
