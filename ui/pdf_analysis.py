@@ -3371,11 +3371,12 @@ def _render_entities_tab(
                     if is_changed else
                     f"color:{_TXT};background:{_BG2};border:1px solid {_BORDER};"
                 )
+                _modified_html = modified if modified else f'<span style="color:{_LBL2};">—</span>'
                 st.markdown(
                     f"<div style='font-size:12px;font-family:monospace;{_bg_css}"
                     f"padding:7px 10px;border-radius:5px;min-height:34px;"
                     f"line-height:1.5;white-space:pre-wrap;word-break:break-word;'>"
-                    f"{modified if modified else f'<span style=\"color:{_LBL2};\">—</span>'}"
+                    f"{_modified_html}"
                     f"{_badge}</div>",
                     unsafe_allow_html=True,
                 )
@@ -4837,6 +4838,7 @@ def _render_journey_tab(
         src_text = finfo.get("source_text", "")
         step1_ts = session_start[:19].replace("T", " ") if session_start else now_str
 
+        _extracted_display = extracted if extracted else f'<span style="color:{_LBL2};">—</span>'
         html = (
             f"<div style='background:{bg};border:1px solid {border};"
             f"border-radius:10px;padding:16px 18px;margin-bottom:12px;'>"
@@ -4862,7 +4864,7 @@ def _render_journey_tab(
             f"<div style='background:{_BG2};border:1px solid {_BORDER};border-radius:5px;"
             f"padding:8px 12px;font-size:12px;color:{_TXT};font-family:monospace;"
             f"word-break:break-word;min-height:32px;'>"
-            f"{extracted if extracted else f'<span style=\"color:{_LBL2};\">—</span>'}"
+            f"{_extracted_display}"
             f"</div>"
             + (
                 f"<div style='font-size:10px;color:{_LBL};font-family:monospace;"
