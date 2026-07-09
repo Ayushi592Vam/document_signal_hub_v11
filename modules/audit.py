@@ -1,28 +1,20 @@
 """
 modules/audit.py
-Append-only audit log helpers.
-
-MIGRATION NOTE: no longer Delta/SQL-backed. Point AUDIT_LOG_PATH
-(config/settings.py) at a Volume path -- reading/writing a file on a
-Unity Catalog Volume needs zero compute, unlike Delta tables. This is
-otherwise identical to the original local-disk version.
+Append-only audit log helpers -- backed by a Unity Catalog Volume via the
+Databricks Files API (see modules/volume_io.py for why plain open()
+against /Volumes doesn't work reliably in a Databricks App).
 """
 
-import json
 from config.settings import AUDIT_LOG_PATH
+from modules.volume_io import load_json, save_json
 
 
 def _load_audit_log() -> list:
-    try:
-        with open(AUDIT_LOG_PATH) as f:
-            return json.load(f)
-    except Exception:
-        return []
+    return load_json(AUDIT_LOG_PATH, default=[])
 
 
 def _save_audit_log(log: list) -> None:
-    with open(AUDIT_LOG_PATH, "w") as f:
-        json.dump(log, f, indent=2)
+    save_json(AUDIT_LOG_PATH, log)
 
 
 def _append_audit(entry: dict) -> None:
