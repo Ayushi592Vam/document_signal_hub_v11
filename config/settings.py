@@ -13,10 +13,10 @@ AUDIT_LOG_PATH          = "/Volumes/documentsignalhub/raw_documents/files/audit_
 JSON_EXPORT_TABLE_PATH  = "/Volumes/documentsignalhub/raw_documents/files/json_export_table.json"
 
 # ── Claim-level duplicate store ───────────────────────────────────────────────
-CLAIM_DUP_STORE_PATH   = "feature_store/claim_dup_store.json"
+#CLAIM_DUP_STORE_PATH   = "feature_store/claim_dup_store.json"
 
-os.makedirs(FEATURE_STORE_PATH, exist_ok=True)
-os.makedirs("feature_store", exist_ok=True)
+#os.makedirs(FEATURE_STORE_PATH, exist_ok=True)
+#os.makedirs("feature_store", exist_ok=True)
 
 # ── Config directory ──────────────────────────────────────────────────────────
 CONFIG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "config")
