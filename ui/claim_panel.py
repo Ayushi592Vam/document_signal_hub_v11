@@ -720,7 +720,8 @@ def render_claim_panel(
     _render_totals_section(totals_data)
 
     # ── Claim header ──────────────────────────────────────────────────────────
-    head_left, head_right = st.columns([3, 1])
+    st.markdown("<p class='section-lbl' style='text-align:right;'>Export Selection</p>", unsafe_allow_html=True)
+    head_left, b1, b2 = st.columns([3, 0.5, 0.5])
     with head_left:
         st.markdown(
             "<p class='section-lbl' style='font-weight:800;color:#0f1117;"
@@ -769,31 +770,30 @@ def render_claim_panel(
             f"</div></div></div></div>",
             unsafe_allow_html=True,
         )
-    with head_right:
-        st.markdown("<p class='section-lbl' style='text-align:right;'>Export Selection</p>", unsafe_allow_html=True)
-        b1, b2 = st.columns([1, 1])
-        with b1:
-            if st.button("✔ All", key=f"all_{selected_sheet}_{curr_claim_id}", use_container_width=True):
-                for fld in curr_claim:
-                    st.session_state[f"chk_{selected_sheet}_{curr_claim_id}_{fld}"] = True
-                _active_s = st.session_state.get("active_schema")
-                if _active_s:
-                    from config.schemas import SCHEMAS
-                    if _active_s in SCHEMAS:
-                        for sf in SCHEMAS[_active_s].get("accepted_fields", []):
-                            st.session_state[f"chk_{selected_sheet}_{curr_claim_id}_{sf}"] = True
-                st.rerun()
-        with b2:
-            if st.button("✘ None", key=f"none_{selected_sheet}_{curr_claim_id}", use_container_width=True):
-                for fld in curr_claim:
-                    st.session_state[f"chk_{selected_sheet}_{curr_claim_id}_{fld}"] = False
-                _active_s = st.session_state.get("active_schema")
-                if _active_s:
-                    from config.schemas import SCHEMAS
-                    if _active_s in SCHEMAS:
-                        for sf in SCHEMAS[_active_s].get("accepted_fields", []):
-                            st.session_state[f"chk_{selected_sheet}_{curr_claim_id}_{sf}"] = False
-                st.rerun()
+    with b1:
+        st.markdown("<div style='height:26px;'></div>", unsafe_allow_html=True)
+        if st.button("✔ All", key=f"all_{selected_sheet}_{curr_claim_id}", use_container_width=True):
+            for fld in curr_claim:
+                st.session_state[f"chk_{selected_sheet}_{curr_claim_id}_{fld}"] = True
+            _active_s = st.session_state.get("active_schema")
+            if _active_s:
+                from config.schemas import SCHEMAS
+                if _active_s in SCHEMAS:
+                    for sf in SCHEMAS[_active_s].get("accepted_fields", []):
+                        st.session_state[f"chk_{selected_sheet}_{curr_claim_id}_{sf}"] = True
+            st.rerun()
+    with b2:
+        st.markdown("<div style='height:26px;'></div>", unsafe_allow_html=True)
+        if st.button("✘ None", key=f"none_{selected_sheet}_{curr_claim_id}", use_container_width=True):
+            for fld in curr_claim:
+                st.session_state[f"chk_{selected_sheet}_{curr_claim_id}_{fld}"] = False
+            _active_s = st.session_state.get("active_schema")
+            if _active_s:
+                from config.schemas import SCHEMAS
+                if _active_s in SCHEMAS:
+                    for sf in SCHEMAS[_active_s].get("accepted_fields", []):
+                        st.session_state[f"chk_{selected_sheet}_{curr_claim_id}_{sf}"] = False
+            st.rerun()
 
     st.markdown("<hr>", unsafe_allow_html=True)
 
