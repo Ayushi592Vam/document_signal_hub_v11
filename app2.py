@@ -5,6 +5,7 @@ Orchestrates all modules and renders the Streamlit UI.
 
 import os
 from dotenv import load_dotenv, find_dotenv
+from modules.orchestrator import run_with_lineage
 
 _app_dir  = os.path.dirname(os.path.abspath(__file__))
 _env_path = os.path.join(_app_dir, ".env")
@@ -310,8 +311,8 @@ if st.session_state.get("_open_journey_dialog"):
 _, col_sheet_dropdown = st.columns([6.8, 1.2])
 
 uploaded = st.file_uploader(
-    "Upload Excel/CSV/PDF/TXT",
-    type=["xlsx", "csv", "pdf", "txt"],
+    "Upload Excel/CSV/PDF/TXT/HTML",
+    type=["xlsx", "csv", "pdf", "txt", "html", "htm"],
     accept_multiple_files=False,
     key="main_uploader",
 )
@@ -362,9 +363,20 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
        intelligence["source"] = "txt"
        st.session_state["_pdf_intelligence"]      = intelligence
        st.session_state["_pdf_intelligence_file"] = excel_path
-       st.session_state["sheet_names"]            = ["Transcript"]   
+       st.session_state["sheet_names"]            = ["Transcript"] 
+
+    elif file_ext in (".html", ".htm"):
+       file_bytes = open(excel_path, "rb").read()
+       from modules.html_parser import parse_html_file
+       parsed = parse_html_file(file_bytes, uploaded.name)
+       intelligence = run_pdf_intelligence(parsed)
+       intelligence["source"] = "html"
+       st.session_state["_pdf_intelligence"]      = intelligence
+       st.session_state["_pdf_intelligence_file"] = excel_path
+       st.session_state["sheet_names"]            = ["Document"]
+    
     else:
-        st.session_state.sheet_names = get_sheet_names(excel_path)
+       st.session_state.sheet_names = get_sheet_names(excel_path)
     
     st.session_state.sheet_cache  = {}
     st.session_state.selected_idx = 0
@@ -574,7 +586,7 @@ if selected_sheet not in st.session_state.sheet_cache:
                             _parsed_for_intel = parse_pdf_with_azure(excel_path)
                             # Surface any Azure error from the intelligence parse too
                             _check_and_show_azure_error(stop_on_error=False)
-                            _intel = run_pdf_intelligence(_parsed_for_intel)
+                            _intel = run_with_lineage("FILE_ENRICHED", uploaded.name, run_pdf_intelligence, _parsed_for_intel)
                             st.session_state[_intel_key]      = _intel
                             st.session_state[_intel_file_key] = excel_path
                         except Exception as _e:
@@ -782,7 +794,7 @@ if file_ext == ".pdf" and st.session_state.get("_pdf_intelligence_file") != exce
             # Surface any Azure error non-fatally — intelligence panel will show
             # the empty state rather than crashing
             _check_and_show_azure_error(stop_on_error=False)
-            _intel = run_pdf_intelligence(_parsed_for_intel)
+            _intel = run_with_lineage("FILE_ENRICHED", uploaded.name, run_pdf_intelligence, _parsed_for_intel)
             st.session_state["_pdf_intelligence"]      = _intel
             st.session_state["_pdf_intelligence_file"] = excel_path
         except Exception as _e:
@@ -795,7 +807,7 @@ _intelligence    = st.session_state.get("_pdf_intelligence", {})
 _pdf_doc_type    = _intelligence.get("doc_type", "") if file_ext in (".pdf", ".txt") else ""
 _use_intel_panel = (
     (file_ext == ".pdf" and _pdf_doc_type in _PDF_INTELLIGENCE_TYPES)
-    or file_ext == ".txt"
+    or file_ext in (".txt", ".html", ".htm")
 )
 
 
