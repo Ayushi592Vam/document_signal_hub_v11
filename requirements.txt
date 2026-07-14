@@ -16,3 +16,4 @@ azure-ai-formrecognizer
 PyMuPDF
 databricks-sql-connector
 databricks-sdk
+beautifulsoup4
