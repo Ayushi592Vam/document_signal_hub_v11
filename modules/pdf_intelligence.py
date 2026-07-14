@@ -1702,7 +1702,7 @@ def analyse_document(
                 ed.setdefault("azure_di_key", None)
 
     # ── HYBRID: regex + spaCy extraction for TXT sources ─────────────────
-    if source == "txt":  # pass source down or check full_text length
+    if source in ("txt", "html"):  # pass source down or check full_text length
         regex_entities = _regex_extract_from_text(full_text)
         spacy_entities = _spacy_extract_from_text(full_text)
 
@@ -1940,7 +1940,7 @@ def _validate_signals_against_text(signals: list, full_text: str) -> list:
 
 def _verify_entities_against_text(entities: dict, full_text: str, source: str = "pdf") -> dict:
     # TXT sources are already clean text — skip aggressive verification
-    if source == "txt":
+    if source in ("txt", "html"):
         return entities
 
     text_lower = full_text.lower()
