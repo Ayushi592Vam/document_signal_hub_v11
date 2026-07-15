@@ -421,7 +421,7 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
         sheet_hashes = {
            st.session_state.sheet_names[0]: _compute_file_sha256(excel_path)
     }
-    elif file_ext in [".docx", ".pdf", ".csv"]:
+    elif file_ext in [".docx", ".pdf", ".csv", ".html", ".htm"]:
         sheet_hashes = {
            st.session_state.sheet_names[0]: _compute_sheet_sha256(
             excel_path, st.session_state.sheet_names[0]
