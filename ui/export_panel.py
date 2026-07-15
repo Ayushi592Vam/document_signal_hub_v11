@@ -29,6 +29,21 @@ from ui.dialogs import show_claim_journey_dialog
 # MAIN PANEL
 # ─────────────────────────────────────────────────────────────────────────────
 
+def _build_cost_metadata(doc_name: str) -> dict:
+    log = st.session_state.get("_llm_cost_log", [])
+    doc_log = [e for e in log if e.get("doc_name", "") == doc_name]
+    if not doc_log:
+        return {}
+    from ui.pdf_analysis import _compute_cost
+    total_cost = sum(_compute_cost(e) for e in doc_log)
+    return {
+        "calls":              len(doc_log),
+        "prompt_tokens":      sum(int(e.get("prompt_tokens", 0)) for e in doc_log),
+        "completion_tokens":  sum(int(e.get("completion_tokens", 0)) for e in doc_log),
+        "total_cost_usd":     round(total_cost, 6),
+        "models_used":        list({e.get("model", "") for e in doc_log}),
+    }
+    
 def render_export_panel(
     *,
     data, curr_claim, curr_claim_id, selected_sheet,
