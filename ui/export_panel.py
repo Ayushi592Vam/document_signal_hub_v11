@@ -300,7 +300,7 @@ def render_export_panel(
             "filename": uploaded_name, "sheet": selected_sheet,
             "timestamp": datetime.datetime.now().isoformat(),
             "type": "Standard", "record_count": len(_std_export_data), "json": json_str,
-        })
+        }, cost_metadata=_build_cost_metadata(uploaded_name))
         _append_audit({
             "event": "EXPORT_GENERATED", "timestamp": datetime.datetime.now().isoformat(),
             "filename": uploaded_name, "sheet": selected_sheet,
@@ -376,7 +376,7 @@ def render_export_panel(
                 "event": "EXPORT_GENERATED", "timestamp": datetime.datetime.now().isoformat(),
                 "filename": uploaded_name, "sheet": selected_sheet,
                 "export_type": etype, "records": len(data),
-            })
+            }, cost_metadata=_build_cost_metadata(uploaded_name))
             st.success("✅ Ready!")
 
     _exp_ready = st.session_state.get(f"_schema_export_data_{selected_sheet}")
