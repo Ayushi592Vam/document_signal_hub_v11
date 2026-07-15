@@ -2,24 +2,19 @@
 modules/storage.py
 Feature store (parsed JSON cache), hash store, and SHA-256 helpers.
 
-MIGRATION NOTE: all persistence now goes through modules/volume_io.py
-(Databricks Files API) instead of plain open() -- see that module for
-why open()/os.makedirs() against /Volumes doesn't work reliably inside
-a Databricks App. _compute_file_sha256 / _compute_sheet_sha256 are
-unchanged since they read the uploaded file from local temp storage
-(st.session_state.tmpdir), not the Volume.
+UPDATE 1: _compute_sheet_sha256 hashes a *sorted, stripped* list of
+non-empty cell values instead of raw cells in positional order, for
+Excel sheets -- makes the hash robust to cosmetic edits (extra
+whitespace, a shifted row/column) that don't change the actual data.
 
-UPDATE: _compute_sheet_sha256 now hashes a *sorted, stripped* list of
-non-empty cell values instead of raw cells in positional order. This
-makes the hash robust to cosmetic edits (extra whitespace, a shifted
-row/column, a reordered column) that don't change the actual data --
-the previous positional hash treated any such edit as a brand new file.
+UPDATE 2: .html/.htm added to the whole-file-hash group (alongside csv/
+pdf/docx) -- previously HTML files fell through to the openpyxl
+workbook-loading branch and would crash immediately on upload.
 
-TRADEOFF: sorting discards positional information. Two sheets with the
-identical *set* of values arranged differently would now hash the same.
-For claims data this is an extremely unlikely false-positive, but it is
-a real tradeoff worth knowing about.
-
+TRADEOFF (Update 1): sorting discards positional information. Two
+sheets with the identical *set* of values arranged differently would
+now hash the same. For claims data this is an extremely unlikely
+false-positive, but it is a real tradeoff worth knowing about.
 """
 
 import datetime
@@ -45,7 +40,7 @@ def _save_hash_store(store: dict) -> None:
 
 def _compute_file_sha256(path: str) -> str:
     """Fast exact-bytes check -- still useful for catching a literal
-    re-upload of the identical file. Unchanged."""
+    re-upload of the identical file."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(65_536), b""):
@@ -56,12 +51,11 @@ def _compute_file_sha256(path: str) -> str:
 def _compute_sheet_sha256(file_path: str, sheet_name: str) -> str:
     """
     For Excel sheets: hashes a sorted, whitespace-stripped list of
-    non-empty cell values, NOT raw cells in row/column order. This is
-    what makes the hash survive cosmetic edits -- see module docstring.
+    non-empty cell values, NOT raw cells in row/column order -- this is
+    what makes the hash survive cosmetic edits.
 
-    For CSV/PDF/DOCX: unchanged -- whole-file byte hash, since these
-    don't have the "same content, different cell layout" problem the
-    same way spreadsheets do.
+    For CSV/PDF/DOCX/HTML: whole-file byte hash, since these don't have
+    the "same content, different cell layout" problem spreadsheets do.
     """
     ext = os.path.splitext(file_path)[1].lower()
 
