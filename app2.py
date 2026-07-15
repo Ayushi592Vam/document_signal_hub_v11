@@ -610,7 +610,7 @@ if selected_sheet not in st.session_state.sheet_cache:
 
             # ── DOCX branch ───────────────────────────────────────────────────
             elif file_ext == ".docx":
-                word_result     = parse_word(excel_path, llm_client=None)
+                word_result     = run_with_lineage("FILE_PARSED", uploaded.name, parse_word, excel_path, llm_client=None)
                 parsed_rows     = [_word_fields_to_row(word_result.get("fields", []))]
                 data            = parsed_rows
                 sheet_type      = "WORD_DOCUMENT"
@@ -654,7 +654,7 @@ if selected_sheet not in st.session_state.sheet_cache:
             # ── Excel / CSV branch ────────────────────────────────────────────
             else:
                 _doc_type_enum = None
-                _excel_result  = extract_from_excel(excel_path, selected_sheet)
+                _excel_result  = run_with_lineage("FILE_PARSED", uploaded.name, extract_from_excel, excel_path, selected_sheet)
                 data           = _excel_result[0]
                 sheet_type     = _excel_result[1]
                 _title_kvs_raw = _excel_result[2] if len(_excel_result) > 2 else {}
