@@ -328,8 +328,14 @@ excel_path = os.path.join(st.session_state.tmpdir, f"input{file_ext}")
 
 _upload_fingerprint = f"{uploaded.name}_{uploaded.file_id}"
 if st.session_state.get("last_uploaded") != _upload_fingerprint:
+    _file_bytes = uploaded.getvalue()
+    from modules.guardrails import validate_upload
+    _ok, _reason = validate_upload(_file_bytes, uploaded.name, file_ext)
+    if not _ok:
+        st.error(f"⚠ Upload rejected: {_reason}")
+        st.stop()
     with open(excel_path, "wb") as f:
-        f.write(uploaded.read())
+        f.write(_file_bytes)
     st.session_state.last_uploaded = _upload_fingerprint
     st.session_state["_file_name"] = uploaded.name
 
