@@ -5929,6 +5929,13 @@ def render_pdf_analysis_panel(
         "💰 Cost Intelligence"
     )
 
+    if intelligence.get("needs_manual_review"):
+        st.warning(
+            "⚠ **Low classification confidence** — this document has been flagged "
+            "for manual review rather than fully automated processing. Verify the "
+            "document type and extracted fields carefully before relying on them."
+        )
+
     tabs = st.tabs([
         f"🔍 Entities",
         "📝 Summary",
