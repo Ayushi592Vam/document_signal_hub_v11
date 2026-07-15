@@ -603,6 +603,8 @@ if selected_sheet not in st.session_state.sheet_cache:
                             st.session_state[_intel_key]      = _intel
                             st.session_state[_intel_file_key] = excel_path
                         except Exception as _e:
+                            from modules.audit import _log_error
+                            _log_error("PDF_INTELLIGENCE", uploaded.name, _e)
                             st.session_state[_intel_key]      = {}
                             st.session_state[_intel_file_key] = excel_path
 
@@ -811,8 +813,10 @@ if file_ext == ".pdf" and st.session_state.get("_pdf_intelligence_file") != exce
             st.session_state["_pdf_intelligence"]      = _intel
             st.session_state["_pdf_intelligence_file"] = excel_path
         except Exception as _e:
-            st.session_state["_pdf_intelligence"]      = {}
-            st.session_state["_pdf_intelligence_file"] = excel_path
+            from modules.audit import _log_error
+            _log_error("PDF_INTELLIGENCE", uploaded.name, _e)
+            st.session_state[_pdf_intelligence]      = {}
+            st.session_state[_pdf_intelligence_file] = excel_path
 
 
 # ── Determine if this PDF needs the intelligence panel ────────────────────────
