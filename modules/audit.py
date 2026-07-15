@@ -4,10 +4,11 @@ Append-only audit log helpers -- backed by a Unity Catalog Volume via the
 Databricks Files API (see modules/volume_io.py for why plain open()
 against /Volumes doesn't work reliably in a Databricks App).
 
-UPDATE: now supports start_time/end_time for duration-bearing events
-(SHEET_PARSED, FILE_ENRICHED, etc.) alongside the original single
-`timestamp` for instantaneous events (FILE_INGESTED). Also applies
-redaction to sensitive field values before writing to the log.
+Supports start_time/end_time for duration-bearing events alongside the
+original single `timestamp` for instantaneous events, applies redaction
+to sensitive field values, and now includes _log_error() -- a single,
+standardized way to log exceptions instead of scattered bare
+`except: pass` blocks with no record of what failed.
 """
 
 from config.settings import AUDIT_LOG_PATH
@@ -50,3 +51,29 @@ def _append_audit_with_duration(entry: dict) -> None:
         _append_audit(entry)
         return
     _append_audit(entry)  # same storage path -- redaction + core-key split applies identically
+
+
+def _log_error(stage: str, filename: str, error: Exception | str, context: dict | None = None) -> None:
+    """
+    Standardized error logging -- replaces bare `except: pass` blocks
+    with a real audit trail entry. Call this from any except block
+    where a failure is currently silently swallowed.
+
+    Usage:
+        try:
+            ...
+        except Exception as e:
+            _log_error("PDF_INTELLIGENCE", uploaded.name, e)
+            # existing fallback behavior stays the same after this
+    """
+    import datetime
+    entry = {
+        "event":       "ERROR",
+        "timestamp":   datetime.datetime.now().isoformat(),
+        "filename":    filename,
+        "stage":       stage,
+        "error":       str(error),
+    }
+    if context:
+        entry.update(context)
+    _append_audit(entry)
