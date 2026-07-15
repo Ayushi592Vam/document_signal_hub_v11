@@ -65,7 +65,7 @@ def _compute_sheet_sha256(file_path: str, sheet_name: str) -> str:
     """
     ext = os.path.splitext(file_path)[1].lower()
 
-    if ext in (".csv", ".pdf", ".docx"):
+    if ext in (".csv", ".pdf", ".docx", ".html", ".htm"):
         h = hashlib.sha256()
         h.update(sheet_name.encode("utf-8"))
         with open(file_path, "rb") as f:
