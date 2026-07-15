@@ -462,6 +462,13 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
             "file_hash": file_hash,
             "sheets":    st.session_state.sheet_names,
         })
+        from modules.document_metadata import record_metadata
+        record_metadata(
+            document_id=file_hash,
+            filename=uploaded.name,
+            parser_used=file_ext.lstrip("."),
+            status="ingested",
+        )
 
     _sheet_hash_index = {}
     for _fh, _fdata in hash_store.items():
