@@ -34,7 +34,7 @@ import os
 import re
 import textwrap
 import hashlib
-
+from modules.orchestrator import with_retry
 
 try:
     from ui.pdf_analysis import _get_keyword_signal_confidence
