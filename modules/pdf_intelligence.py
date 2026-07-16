@@ -430,13 +430,13 @@ Respond ONLY with valid JSON. No preamble.
 
 
 def classify_document(full_text: str) -> dict:
-    result = _llm_call(
+    result = with_retry(lambda: _llm_call(
         system_prompt=_CLASSIFICATION_SYSTEM,
         user_prompt=f"Classify this document:\n\n{full_text[:3000]}",
         max_tokens=400,
         label="classify",
         use_enhanced=False,
-    )
+    ), max_attempts=2)
 
 
     # ── Simple fallback: just return the default, no broken retry ────────────
@@ -1658,13 +1658,13 @@ def analyse_document(
         + "medical complexity, and coverage issues."
         + f"\\n\\n--- DOCUMENT TEXT ---\\n{full_text[:10000]}"
     )
-    result_b = _llm_call(
+    result_b = with_retry(lambda: _llm_call(
         system_prompt=_signals_system(doc_type),
         user_prompt=user_b_signals,
-        max_tokens=3500,   # PATCHED: was 2500
+        max_tokens=3500,
         label="signals",
         use_enhanced=False,
-    )
+    ), max_attempts=2)
 
 
     # ── CALL C — Summary + type_specific + judge (gpt-4o-mini) ───────────────
