@@ -615,8 +615,7 @@ if selected_sheet not in st.session_state.sheet_cache:
                         try:
                             from modules.pdf_intelligence import run_pdf_intelligence
                             from modules.pdf_azure_parser import parse_pdf_with_azure
-                            _parsed_for_intel = parse_pdf_with_azure(excel_path)
-                            # Surface any Azure error from the intelligence parse too
+                            _parsed_for_intel = run_with_lineage("FILE_PARSED", uploaded.name, parse_pdf_with_azure, excel_path)
                             _check_and_show_azure_error(stop_on_error=False)
                             _intel = run_with_lineage("FILE_ENRICHED", uploaded.name, run_pdf_intelligence, _parsed_for_intel)
                             st.session_state[_intel_key]      = _intel
@@ -824,9 +823,7 @@ if file_ext == ".pdf" and st.session_state.get("_pdf_intelligence_file") != exce
         try:
             from modules.pdf_intelligence import run_pdf_intelligence
             from modules.pdf_azure_parser import parse_pdf_with_azure
-            _parsed_for_intel = parse_pdf_with_azure(excel_path)
-            # Surface any Azure error non-fatally — intelligence panel will show
-            # the empty state rather than crashing
+            _parsed_for_intel = run_with_lineage("FILE_PARSED", uploaded.name, parse_pdf_with_azure, excel_path)
             _check_and_show_azure_error(stop_on_error=False)
             _intel = run_with_lineage("FILE_ENRICHED", uploaded.name, run_pdf_intelligence, _parsed_for_intel)
             st.session_state["_pdf_intelligence"]      = _intel
@@ -834,8 +831,8 @@ if file_ext == ".pdf" and st.session_state.get("_pdf_intelligence_file") != exce
         except Exception as _e:
             from modules.audit import _log_error
             _log_error("PDF_INTELLIGENCE", uploaded.name, _e)
-            st.session_state[_pdf_intelligence]      = {}
-            st.session_state[_pdf_intelligence_file] = excel_path
+            st.session_state["_pdf_intelligence"]      = {}
+            st.session_state["_pdf_intelligence_file"] = excel_path
 
 
 # ── Determine if this PDF needs the intelligence panel ────────────────────────
