@@ -44,7 +44,7 @@ from azure.core.credentials import AzureKeyCredential
 from azure.ai.formrecognizer import DocumentAnalysisClient
 import os
 from dotenv import load_dotenv
-
+from modules.orchestrator import track_cost
 
 # ─────────────────────────────────────────────────────────────────────────────
 # AZURE CONFIG
