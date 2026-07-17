@@ -322,8 +322,8 @@ if st.session_state.get("_open_journey_dialog"):
 _, col_sheet_dropdown = st.columns([6.8, 1.2])
 
 uploaded = st.file_uploader(
-    "Upload Excel/CSV/PDF/TXT/HTML",
-    type=["xlsx", "csv", "pdf", "txt", "html", "htm"],
+    "Upload Excel/CSV/PDF/TXT/DOCX/HTML",
+    type=["xlsx", "csv", "pdf", "docx", "txt", "html", "htm"],
     accept_multiple_files=False,
     key="main_uploader",
 )
