@@ -337,13 +337,25 @@ def render_export_panel(
             if "Guidewire" in _schema_sel:
                 recs = build_mapped_records_for_export(data, "Guidewire", selected_sheet)
                 _inject_user_fields(recs, selected_sheet)
-                gj = _sanitize_for_json(
-                    to_guidewire_json(
-                        recs,
-                        _sheet_meta,
-                        title_fields=title_fields,
-                        merged_meta=merged_meta,
+                gj = run_with_lineage(
+                    "FILE_EXPORTED",
+                    uploaded_name,
+                    lambda: _sanitize_for_json(
+                        to_guidewire_json(
+                            recs,
+                            _sheet_meta,
+                            title_fields=title_fields,
+                            merged_meta=merged_meta,
+                        )
                     )
+                )
+
+                record_metadata(
+                    document_id=sh_hash,
+                    filename=uploaded_name,
+                    parser_used="export",
+                    status="exported",
+                    tags=["export:guidewire"],
                 )
                 json_str = json.dumps(gj, indent=2, ensure_ascii=False)
                 _save_to_feature_store(sh_hash, selected_sheet, gj)
@@ -355,14 +367,27 @@ def render_export_panel(
             elif "Duck Creek" in _schema_sel:
                 recs = build_mapped_records_for_export(data, "Duck Creek", selected_sheet)
                 _inject_user_fields(recs, selected_sheet)
-                dj = _sanitize_for_json(
-                    to_duck_creek_json(
-                        recs,
-                        _sheet_meta,
-                        title_fields=title_fields,
-                        merged_meta=merged_meta,
+                dj = run_with_lineage(
+                    "FILE_EXPORTED",
+                    uploaded_name,
+                    lambda: _sanitize_for_json(
+                        to_duck_creek_json(
+                            recs,
+                            _sheet_meta,
+                            title_fields=title_fields,
+                            merged_meta=merged_meta,
+                        )
                     )
                 )
+
+                record_metadata(
+                    document_id=sh_hash,
+                    filename=uploaded_name,
+                    parser_used="export",
+                    status="exported",
+                    tags=["export:duckcreek"],
+                )
+
                 json_str = json.dumps(dj, indent=2, ensure_ascii=False)
                 _save_to_feature_store(sh_hash, selected_sheet, dj)
                 st.session_state[f"_schema_export_data_{selected_sheet}"] = {
