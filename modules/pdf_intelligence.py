@@ -281,16 +281,17 @@ def _llm_call(
     )
 
     try:
-        response = client.chat.completions.create(
-            model=model,
-            temperature=0.0,
-            seed=42,                          # ← OpenAI honours this for determinism
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user",   "content": user_prompt},
-            ],
-            **token_param,
-        )
+        with track_cost("api"):
+            response = client.chat.completions.create(
+                model=model,
+                temperature=0.0,
+                seed=42,                          # ← OpenAI honours this for determinism
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user",   "content": user_prompt},
+                ],
+                **token_param,
+            )
 
         # ── LLM Cost Logging ──────────────────────────────────────────────
         try:
