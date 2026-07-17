@@ -502,6 +502,15 @@ render_file_card(
     sheet_dup_info, st.session_state.sheet_names,
 )
 
+from modules.document_metadata import get_metadata
+_doc_meta = get_metadata(file_hash)
+if _doc_meta:
+    with st.expander(f"📜 Processing History — v{_doc_meta.get('version', 1)}"):
+        for _evt in _doc_meta.get("status_history", []):
+            st.markdown(f"- **{_evt.get('status','')}** via `{_evt.get('parser_used','')}` — {_evt.get('timestamp','')[:19].replace('T',' ')}")
+        if _doc_meta.get("tags"):
+            st.caption("Tags: " + ", ".join(_doc_meta["tags"]))
+
 # with col_sheet_dropdown:
 #     st.markdown("<div style='margin-top:20px;'></div>", unsafe_allow_html=True)
 #     selected_sheet = st.selectbox(
