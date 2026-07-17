@@ -1697,7 +1697,23 @@ def analyse_document(
 
         # ── PATCH: LLM semantic filter ────────────────────────────────────
         entities = _llm_filter_entities(entities, doc_type, full_text)
-        
+
+        try:
+            _known_fields = {
+                ln.split(" (also:")[0].strip().lower()
+                for ln in build_entity_field_list(doc_type, subtype).split("\n") if ln.strip()
+            }
+            _new_fields = [fn for fn in entities.keys() if fn.strip().lower() not in _known_fields]
+            if _new_fields:
+                from modules.audit import _append_audit
+                import datetime as _dt
+                _append_audit({
+                    "event": "NEW_FIELDS_DETECTED", "timestamp": _dt.datetime.now().isoformat(),
+                    "filename": "unknown", "doc_type": doc_type, "new_fields": _new_fields,
+                })
+        except Exception:
+            pass
+      
         for _, ed in entities.items():
             if isinstance(ed, dict):
                 ed.setdefault("azure_di_key", None)
