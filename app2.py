@@ -89,6 +89,15 @@ except ImportError as _pdf_panel_err:
 # ════════════════════════════════════════════════════════════════════════════
 _PDF_INTELLIGENCE_TYPES = {"FNOL", "Legal", "Medical", "Loss Run", "Underwriting"}
 
+PARSER_REGISTRY = {
+    ".xlsx": {"module": "modules.parsing",         "function": "extract_from_excel",   "label": "Excel"},
+    ".csv":  {"module": "modules.parsing",         "function": "extract_from_excel",   "label": "CSV"},
+    ".pdf":  {"module": "modules.pdf_azure_parser","function": "parse_pdf_with_azure", "label": "PDF (Azure DI)"},
+    ".docx": {"module": "modules.word_parser",     "function": "parse_word",           "label": "Word"},
+    ".txt":  {"module": "modules.parsing",         "function": "parse_txt_file",       "label": "Text/Transcript"},
+    ".html": {"module": "modules.html_parser",     "function": "parse_html_file",      "label": "HTML"},
+    ".htm":  {"module": "modules.html_parser",     "function": "parse_html_file",      "label": "HTML"},
+}
 
 # ════════════════════════════════════════════════════════════════════════════
 # Azure error banner helper
