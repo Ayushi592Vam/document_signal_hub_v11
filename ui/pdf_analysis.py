@@ -5454,6 +5454,66 @@ _log_llm_cost("Entity Extraction", deployment, response)
         unsafe_allow_html=True,
     )
 
+    # ── Execution Cost Breakdown (parser / api / orchestration) ────────────
+    _cur_doc_for_cost = st.session_state.get("_file_name", "")
+    _cost_bd = summarize_cost_breakdown(filename=_cur_doc_for_cost or None)
+
+    st.markdown(_section_header(
+        "Execution Cost Breakdown",
+        "parser time vs API time vs orchestration overhead",
+    ), unsafe_allow_html=True)
+
+    if _cost_bd["call_count"] == 0:
+        st.markdown(
+            f"<div style='background:{_BG2};border:1px solid {_BORDER};"
+            f"border-radius:8px;padding:16px;color:{_LBL};font-family:monospace;"
+            f"font-size:11px;line-height:1.7;margin-bottom:20px;'>"
+            f"No decomposed lineage data yet for this file. This needs "
+            f"<code>track_cost(\"parser\")</code> / <code>track_cost(\"api\")</code> "
+            f"wrapping in <code>pdf_intelligence.py</code> / <code>pdf_azure_parser.py</code>, "
+            f"and at least one <code>run_with_lineage()</code> call to have completed."
+            f"</div>",
+            unsafe_allow_html=True,
+        )
+    else:
+        eb1, eb2, eb3 = st.columns(3)
+        for col, icon, label, ms_val, pct_val, color in [
+            (eb1, "📄", "PARSER TIME",       _cost_bd["parser_ms"],        _cost_bd["parser_pct"],        "#0284c7"),
+            (eb2, "🤖", "API TIME",          _cost_bd["api_ms"],           _cost_bd["api_pct"],           "#7c3aed"),
+            (eb3, "⚙️", "ORCHESTRATION",     _cost_bd["orchestration_ms"], _cost_bd["orchestration_pct"], "#64748b"),
+        ]:
+            with col:
+                st.markdown(
+                    f"<div style='background:{_BG2};border:1px solid {color}30;"
+                    f"border-radius:10px;padding:14px;text-align:center;margin-bottom:10px;'>"
+                    f"<div style='font-size:18px;margin-bottom:4px;'>{icon}</div>"
+                    f"<div style='font-size:9px;color:{_LBL};font-family:monospace;"
+                    f"text-transform:uppercase;letter-spacing:1.5px;font-weight:700;'>{label}</div>"
+                    f"<div style='font-size:20px;font-weight:900;color:{color};"
+                    f"font-family:monospace;margin:4px 0;'>{ms_val:,.0f}ms</div>"
+                    f"<div style='font-size:10px;color:{_LBL};font-family:monospace;'>{pct_val}% of total</div>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+        with st.expander(f"📋 Per-event breakdown ({_cost_bd['call_count']} lineage call(s))"):
+            for ev, b in sorted(_cost_bd["by_event"].items(), key=lambda x: -x[1]["total_ms"]):
+                st.markdown(
+                    f"<div style='background:{_BG};border:1px solid {_BORDER};border-radius:6px;"
+                    f"padding:8px 12px;margin-bottom:6px;font-family:monospace;font-size:11px;'>"
+                    f"<b>{ev}</b> · {b['call_count']} call(s) · {b['total_ms']:,.0f}ms total &nbsp;"
+                    f"<span style='color:#0284c7;'>parser {b['parser_ms']:,.0f}ms</span> · "
+                    f"<span style='color:#7c3aed;'>api {b['api_ms']:,.0f}ms</span> · "
+                    f"<span style='color:{_LBL};'>orch {b['orchestration_ms']:,.0f}ms</span>"
+                    f"</div>",
+                    unsafe_allow_html=True,
+                )
+
+    st.markdown(
+        f"<div style='height:1px;background:linear-gradient(90deg,#bfdbfe,transparent);"
+        f"margin:12px 0 24px 0;'></div>",
+        unsafe_allow_html=True,
+    )
     # ── Current file section ──────────────────────────────────────────────────
     if doc_log or adi_log_cur:
         st.markdown(
