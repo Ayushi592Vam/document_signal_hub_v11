@@ -98,6 +98,7 @@ PARSER_REGISTRY = {
     ".html": {"module": "modules.html_parser",     "function": "parse_html_file",      "label": "HTML"},
     ".htm":  {"module": "modules.html_parser",     "function": "parse_html_file",      "label": "HTML"},
 }
+_SUPPORTED_UPLOAD_TYPES = sorted({ext.lstrip(".") for ext in PARSER_REGISTRY})
 
 # ════════════════════════════════════════════════════════════════════════════
 # Azure error banner helper
@@ -323,7 +324,7 @@ _, col_sheet_dropdown = st.columns([6.8, 1.2])
 
 uploaded = st.file_uploader(
     "Upload Excel/CSV/PDF/TXT/DOCX/HTML",
-    type=["xlsx", "csv", "pdf", "docx", "txt", "html", "htm"],
+    type=_SUPPORTED_UPLOAD_TYPES,
     accept_multiple_files=False,
     key="main_uploader",
 )
@@ -335,6 +336,11 @@ if "tmpdir" not in st.session_state:
     st.session_state.tmpdir = tempfile.mkdtemp()
 
 file_ext   = os.path.splitext(uploaded.name)[1].lower()
+
+if file_ext not in PARSER_REGISTRY:
+    st.error(f"⚠ Unsupported file type: {file_ext}")
+    st.stop()
+    
 excel_path = os.path.join(st.session_state.tmpdir, f"input{file_ext}")
 
 _upload_fingerprint = f"{uploaded.name}_{uploaded.file_id}"
