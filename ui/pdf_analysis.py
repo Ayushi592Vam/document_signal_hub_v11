@@ -43,6 +43,7 @@ import os
 import re
 
 import streamlit as st
+from modules.orchestrator import summarize_cost_breakdown
 
 import re as _re_kw  # ← add this at the TOP of pdf_analysis.py with other imports
 
