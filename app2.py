@@ -187,6 +187,7 @@ def _word_fields_to_row(fields: list[dict]) -> dict:
         val = str(f.get("value", "") or "").strip()
         row[field_name] = {
             "value": val, "modified": val,
+            "confidence": float(f.get("confidence", 0.85)),  # was missing entirely
             "source_type":  "word",
             "source_block": f.get("source_block"),
             "source_para":  f.get("source_para"),
@@ -196,7 +197,8 @@ def _word_fields_to_row(fields: list[dict]) -> dict:
             "source_text":  f.get("source_text", ""),
             "excel_row": None, "excel_col": None,
         }
-    return row
+    from modules.canonical import to_canonical_fields
+    return to_canonical_fields(row, source_type="word")
 
 
 def _parse_pdf(file_path: str):
