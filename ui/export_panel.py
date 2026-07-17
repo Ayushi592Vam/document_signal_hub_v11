@@ -284,14 +284,18 @@ def render_export_panel(
                 }
             _std_export_data[c_id] = clean_duplicate_fields(rec)
 
-        output = _sanitize_for_json(
-            to_standard_json(
-                _std_export_data,
-                _sheet_meta,
-                totals_data,
-                merged_meta,
-                title_fields=title_fields,
-            )
+        from modules.orchestrator import run_with_lineage
+        from modules.document_metadata import record_metadata
+
+        output = run_with_lineage(
+            "FILE_EXPORTED", uploaded_name,
+            lambda: _sanitize_for_json(to_standard_json(
+                _std_export_data, _sheet_meta, totals_data, merged_meta, title_fields=title_fields,
+            ))
+        )
+        record_metadata(
+            document_id=sh_hash, filename=uploaded_name,
+            parser_used="export", status="exported", tags=["export:standard"],
         )
         json_str = json.dumps(output, indent=2, ensure_ascii=False)
         _save_to_feature_store(sh_hash, selected_sheet, output)
