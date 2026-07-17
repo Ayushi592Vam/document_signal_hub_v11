@@ -36,6 +36,7 @@ import textwrap
 import hashlib
 from modules.orchestrator import with_retry
 
+
 try:
     from ui.pdf_analysis import _get_keyword_signal_confidence
 except ImportError:
@@ -2190,8 +2191,16 @@ def run_pdf_intelligence(parsed: dict, sheet_cache: dict | None = None) -> dict:
                     }
 
     # ── Classify + Analyse ────────────────────────────────────────────────────
-    classification = classify_document(full_text)
-    doc_type       = classification.get("classification", "Legal")
+    from modules.classification_router import route_classification
+    routed = route_classification(full_text, llm_classify_fn=classify_document)
+    classification = {
+        "classification": routed["classification"],
+        "confidence":     routed["confidence"],
+        "reasoning":      f"Routed via {routed['source']}.",
+        "ambiguities":    "",
+    }
+    doc_type = routed["classification"]
+    _debug_store("classification_route", routed["route"])
     # analysis       = analyse_document(full_text, doc_type, azure_di_fields=azure_di_index)
     analysis = analyse_document(full_text, doc_type, azure_di_fields=azure_di_index, source=source)
 
@@ -2203,8 +2212,16 @@ def run_pdf_intelligence(parsed: dict, sheet_cache: dict | None = None) -> dict:
         "doc_type":       doc_type,
         "azure_di_index": azure_di_index,
         "source":         source,
-        "_content_hash":  _fhash,        # ← used by Layer 1 cache check
+        "_content_hash":  _fhash,   # ← used by Layer 1 cache check
+          
     }
+    result["needs_manual_review"] = (routed["route"] == "manual_review")
+
+    from modules.guardrails import validate_extraction_output
+    _ok, _reason = validate_extraction_output(result)
+    if not _ok:
+        from modules.audit import _log_error
+        _log_error("OUTPUT_GUARDRAIL", parsed.get("filename", "unknown"), _reason)
 
     # For TXT: fallback entities if LLM returned empty
     if source == "txt" and not result["analysis"].get("entities"):
