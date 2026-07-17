@@ -20,6 +20,8 @@ from modules.export import (
 from modules.json_export_table import _append_json_export
 from modules.schema_mapping import map_claim_to_schema, detect_claim_id
 from modules.storage import _save_to_feature_store
+from modules.orchestrator import run_with_lineage
+from modules.document_metadata import record_metadata
 
 import datetime
 from ui.dialogs import show_claim_journey_dialog
@@ -284,8 +286,7 @@ def render_export_panel(
                 }
             _std_export_data[c_id] = clean_duplicate_fields(rec)
 
-        from modules.orchestrator import run_with_lineage
-        from modules.document_metadata import record_metadata
+        
 
         output = run_with_lineage(
             "FILE_EXPORTED", uploaded_name,
