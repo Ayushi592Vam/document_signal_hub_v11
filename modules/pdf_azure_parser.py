@@ -517,6 +517,12 @@ def _store_azure_error(raw_msg: str) -> str:
     except Exception:
         pass
 
+    try:
+        from modules.audit import _log_error
+        _log_error("AZURE_DI", st.session_state.get("_file_name", "unknown"), raw_msg)
+    except Exception:
+        pass
+
     return friendly
 
 
