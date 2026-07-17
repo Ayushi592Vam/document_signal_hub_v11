@@ -466,10 +466,9 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
         })
         from modules.document_metadata import record_metadata
         record_metadata(
-            document_id=file_hash,
-            filename=uploaded.name,
-            parser_used=file_ext.lstrip("."),
-            status="ingested",
+            document_id=file_hash, filename=uploaded.name,
+            parser_used=file_ext.lstrip("."), status="ingested",
+            tags=[f"ext:{file_ext.lstrip('.')}"],
         )
 
     _sheet_hash_index = {}
@@ -828,6 +827,15 @@ _use_intel_panel = (
     (file_ext == ".pdf" and _pdf_doc_type in _PDF_INTELLIGENCE_TYPES)
     or file_ext in (".txt", ".html", ".htm")
 )
+
+if file_ext in (".pdf", ".txt", ".html", ".htm") and _intelligence:
+    from modules.document_metadata import record_metadata
+    record_metadata(
+        document_id=file_hash, filename=uploaded.name,
+        parser_used=file_ext.lstrip("."), status="classified",
+        confidence_score=_intelligence.get("classification", {}).get("confidence"),
+        tags=[f"doctype:{_intelligence.get('doc_type', 'unknown')}"],
+    )
 
 
 # ── Auto-normalize ────────────────────────────────────────────────────────────
