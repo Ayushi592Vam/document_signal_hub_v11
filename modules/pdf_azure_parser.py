@@ -565,9 +565,10 @@ def parse_pdf_with_azure(file_path: str | Path) -> dict:
     
     # ── Call Azure DI — catch HttpResponseError and any other network error ───
     try:
-        with open(file_path, "rb") as f:
-            poller = client.begin_analyze_document("prebuilt-document", document=f)
-        result = poller.result()
+        with track_cost("parser"):
+            with open(file_path, "rb") as f:
+                poller = client.begin_analyze_document("prebuilt-document", document=f)
+            result = poller.result()
 
         # ── ADI Cost Logging ──────────────────────────────────────────────────
         try:
@@ -659,19 +660,20 @@ def parse_pdf_with_azure(file_path: str | Path) -> dict:
         page_field_map[page_num] = _dedupe_fields(page_field_map[page_num])
 
     # ── Step 3: PyMuPDF fallback — synthetic polygons for remaining None fields
-    for page_num, fields in page_field_map.items():
-        missing_bbox = [f for f in fields if f.get("bounding_polygon") is None]
-        if not missing_bbox:
-            continue
+    with track_cost("parser"):
+        for page_num, fields in page_field_map.items():
+            missing_bbox = [f for f in fields if f.get("bounding_polygon") is None]
+            if not missing_bbox:
+                continue
 
-        pw, ph = page_dim_map.get(page_num, (8.5, 11.0))
-        _enrich_fields_with_pymupdf_polygons(
-            fields             = fields,
-            pdf_path           = file_path,
-            page_num           = page_num,
-            page_width_inches  = pw,
-            page_height_inches = ph,
-        )
+            pw, ph = page_dim_map.get(page_num, (8.5, 11.0))
+            _enrich_fields_with_pymupdf_polygons(
+                fields             = fields,
+                pdf_path           = file_path,
+                page_num           = page_num,
+                page_width_inches  = pw,
+                page_height_inches = ph,
+            )
 
     # ── Assemble output ───────────────────────────────────────────────────────
     pages_out: list[dict] = []
