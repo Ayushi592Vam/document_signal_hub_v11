@@ -49,7 +49,7 @@ def _build_cost_metadata(doc_name: str) -> dict:
 def render_export_panel(
     *,
     data, curr_claim, curr_claim_id, selected_sheet,
-    sh_hash, uploaded_name, SCHEMAS,
+    sh_hash, file_hash, uploaded_name, SCHEMAS,
     merged_meta, totals_data, title_fields,
     _llm_map_result,
 ):
