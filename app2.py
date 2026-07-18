@@ -379,55 +379,55 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
     # ADD this alongside your existing elif blocks:
     elif file_ext == ".txt":
 
-    file_bytes = open(excel_path, "rb").read()
-
-    parsed = run_with_lineage(
-        "FILE_PARSED",
-        uploaded.name,
-        parse_txt_file,
-        file_bytes,
-        uploaded.name,
-    )
-
-    intelligence = run_with_lineage(
-        "FILE_ENRICHED",
-        uploaded.name,
-        run_pdf_intelligence,
-        parsed,
-    )
-
-    intelligence["source"] = "txt"
-
-    st.session_state["_pdf_intelligence"] = intelligence
-    st.session_state["_pdf_intelligence_file"] = excel_path
-    st.session_state["sheet_names"] = ["Transcript"]
+        file_bytes = open(excel_path, "rb").read()
+    
+        parsed = run_with_lineage(
+            "FILE_PARSED",
+            uploaded.name,
+            parse_txt_file,
+            file_bytes,
+            uploaded.name,
+        )
+    
+        intelligence = run_with_lineage(
+            "FILE_ENRICHED",
+            uploaded.name,
+            run_pdf_intelligence,
+            parsed,
+        )
+    
+        intelligence["source"] = "txt"
+    
+        st.session_state["_pdf_intelligence"] = intelligence
+        st.session_state["_pdf_intelligence_file"] = excel_path
+        st.session_state["sheet_names"] = ["Transcript"]
 
     elif file_ext in (".html", ".htm"):
 
-    file_bytes = open(excel_path, "rb").read()
-
-    from modules.html_parser import parse_html_file
-
-    parsed = run_with_lineage(
-        "FILE_PARSED",
-        uploaded.name,
-        parse_html_file,
-        file_bytes,
-        uploaded.name,
-    )
-
-    intelligence = run_with_lineage(
-        "FILE_ENRICHED",
-        uploaded.name,
-        run_pdf_intelligence,
-        parsed,
-    )
-
-    intelligence["source"] = "html"
-
-    st.session_state["_pdf_intelligence"] = intelligence
-    st.session_state["_pdf_intelligence_file"] = excel_path
-    st.session_state["sheet_names"] = ["Document"]
+        file_bytes = open(excel_path, "rb").read()
+    
+        from modules.html_parser import parse_html_file
+    
+        parsed = run_with_lineage(
+            "FILE_PARSED",
+            uploaded.name,
+            parse_html_file,
+            file_bytes,
+            uploaded.name,
+        )
+    
+        intelligence = run_with_lineage(
+            "FILE_ENRICHED",
+            uploaded.name,
+            run_pdf_intelligence,
+            parsed,
+        )
+    
+        intelligence["source"] = "html"
+    
+        st.session_state["_pdf_intelligence"] = intelligence
+        st.session_state["_pdf_intelligence_file"] = excel_path
+        st.session_state["sheet_names"] = ["Document"]
     
     else:
        st.session_state.sheet_names = get_sheet_names(excel_path)
