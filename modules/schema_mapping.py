@@ -42,7 +42,6 @@ def _try_parse_date(value: str):
 
 # ── Utility ───────────────────────────────────────────────────────────────────
 
-def detect_claim_id(row: dict, index: int | None = None) -> str:
     _CHECK_NO_KEYS = [
     "check number", "check no", "check #", "check num",
     "cheque number", "cheque no",
