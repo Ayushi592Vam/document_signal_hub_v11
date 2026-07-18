@@ -1018,7 +1018,11 @@ else:
         st.session_state[_frozen_id_key] = detect_claim_id(curr_claim)
     curr_claim_id = st.session_state[_frozen_id_key]
 
-    if enrich_claim_cause_of_loss(curr_claim, curr_claim_id, selected_sheet):
+    # Cause-of-Loss is a claims concept -- skip it for check registers,
+    # where "description"/"memo" columns are payee memos, not loss
+    # narratives. Without this it burns an LLM call trying to force a
+    # check memo into an insurance loss taxonomy.
+    if sheet_type != "CHECK_REGISTER" and enrich_claim_cause_of_loss(curr_claim, curr_claim_id, selected_sheet):
         st.rerun()
 
     col_nav, col_main, col_fmt = st.columns([1.2, 3.2, 1.4], gap="large")
