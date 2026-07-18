@@ -1051,6 +1051,7 @@ else:
             curr_claim_id=curr_claim_id,
             selected_sheet=selected_sheet,
             sh_hash=sh_hash,
+            file_hash=file_hash,
             uploaded_name=uploaded.name,
             SCHEMAS=SCHEMAS,
             merged_meta=merged_meta,
