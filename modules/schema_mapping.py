@@ -42,15 +42,16 @@ def _try_parse_date(value: str):
 
 # ── Utility ───────────────────────────────────────────────────────────────────
 
-    _CHECK_NO_KEYS = [
-    "check number", "check no", "check #", "check num",
-    "cheque number", "cheque no",
-]
+   
 
 def detect_claim_id(row: dict, index: int | None = None) -> str:
     # Check-register rows key off Check Number, not Claim Number -- multiple
     # checks can reference the same claim, so keying on Claim Number would
     # make distinct checks collide as "the same record" in claim_dup_store.
+    _CHECK_NO_KEYS = [
+        "check number", "check no", "check #", "check num",
+        "cheque number", "cheque no",
+    ]
     for k, v in row.items():
         name = str(k).lower().replace("_", " ").strip()
         if any(x in name for x in _CHECK_NO_KEYS):
