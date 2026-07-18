@@ -617,7 +617,9 @@ if selected_sheet not in st.session_state.sheet_cache:
 
             # ── PDF branch ────────────────────────────────────────────────────
             if file_ext == ".pdf":
-                all_pages_data, sheet_type, _doc_type_enum, _azure_result = _parse_pdf(excel_path)
+                all_pages_data, sheet_type, _doc_type_enum, _azure_result = run_with_lineage(
+                "FILE_PARSED", uploaded.name, _parse_pdf, excel_path
+            )
 
                 # Show Azure error banner if parse failed (non-fatal — keep going
                 # with empty data so the rest of the UI doesn't crash)
