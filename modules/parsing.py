@@ -37,6 +37,21 @@ def classify_sheet(rows) -> str:
             if non_empty and str(non_empty[0]).lower().strip() == "line of business" and len(non_empty) == 1:
                 return "SUMMARY"
 
+    # ── Check Register detection ──────────────────────────────────────────
+    # Must run BEFORE the claim/policy signals below: an insurance check
+    # register legitimately has "claim number" and "policy number" columns
+    # and would otherwise be misclassified as COMMERCIAL_LOSS_RUN.
+    has_check_no = any(x in text for x in [
+        "check number", "check no.", "check no", "check #", "check num",
+        "cheque number", "cheque no",
+    ])
+    has_payee = "payee" in text
+    has_register_ledger = any(x in text for x in [
+        "running total", "running balance", "payment/debit", "deposit/credit", "balance",
+    ])
+    if has_check_no and (has_payee or has_register_ledger):
+        return "CHECK_REGISTER"
+      
     has_claim = any(x in text for x in [
         "claim number", "claim no", "claim #", "claim id", "claim_id",
         "claim ref", "claimant", "file number", "file no", "file num",
