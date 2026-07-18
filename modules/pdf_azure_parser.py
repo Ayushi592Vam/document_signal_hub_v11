@@ -500,6 +500,7 @@ def _store_azure_error(raw_msg: str) -> str:
     On Streamlit Cloud the real message is redacted — detect that and
     show helpful troubleshooting text instead.
     """
+    import streamlit as st
     if not raw_msg.strip() or "redacted" in raw_msg.lower():
         friendly = (
             "Azure Document Intelligence returned an HTTP error "
@@ -512,7 +513,6 @@ def _store_azure_error(raw_msg: str) -> str:
         friendly = f"Azure Document Intelligence error: {raw_msg}"
 
     try:
-        import streamlit as st
         st.session_state["_azure_di_error"] = friendly
     except Exception:
         pass
