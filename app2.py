@@ -358,7 +358,12 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
 
     if file_ext == ".pdf":
         from modules.pdf_azure_parser import get_pdf_sheet_names
-        st.session_state.sheet_names = get_pdf_sheet_names(excel_path)
+        st.session_state.sheet_names = run_with_lineage(
+        "FILE_PARSED",
+        uploaded.name,
+        get_pdf_sheet_names,
+        excel_path,
+     )
 
         # ── Show Azure error banner and stop if the parse failed ──────────────
         # parse_pdf_with_azure() stores the error in session state; we surface
