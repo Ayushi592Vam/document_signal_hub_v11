@@ -295,7 +295,7 @@ def render_export_panel(
             ))
         )
         record_metadata(
-            document_id=sh_hash, filename=uploaded_name,
+            document_id=file_hash, filename=uploaded_name,
             parser_used="export", status="exported", tags=["export:standard"],
         )
         json_str = json.dumps(output, indent=2, ensure_ascii=False)
@@ -351,7 +351,7 @@ def render_export_panel(
                 )
 
                 record_metadata(
-                    document_id=sh_hash,
+                    document_id=file_hash,
                     filename=uploaded_name,
                     parser_used="export",
                     status="exported",
@@ -381,7 +381,7 @@ def render_export_panel(
                 )
 
                 record_metadata(
-                    document_id=sh_hash,
+                    document_id=file_hash,
                     filename=uploaded_name,
                     parser_used="export",
                     status="exported",
