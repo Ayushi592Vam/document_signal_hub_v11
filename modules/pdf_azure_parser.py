@@ -571,6 +571,7 @@ def parse_pdf_with_azure(file_path: str | Path) -> dict:
             result = poller.result()
 
         # ── ADI Cost Logging ──────────────────────────────────────────────────
+      
         try:
             import streamlit as st
             import datetime
@@ -586,15 +587,25 @@ def parse_pdf_with_azure(file_path: str | Path) -> dict:
             if "_adi_cost_log" not in st.session_state:
                 st.session_state["_adi_cost_log"] = []
 
-            st.session_state["_adi_cost_log"].append({
+            _adi_entry = {
                 "model":      "prebuilt-document",
                 "pages":      _adi_page_count,
                 "cost":       _adi_page_count * _ADI_PRICE_PER_PAGE,
                 "timestamp":  datetime.datetime.now().isoformat(),
                 "doc_name":   str(file_path).split("/")[-1],
-            })
+            }
+            st.session_state["_adi_cost_log"].append(_adi_entry)
+
+            # Persist to the Volume -- same rationale as the LLM cost log.
+            from config.settings import ADI_COST_LOG_PATH
+            from modules.volume_io import load_json, save_json
+            _adi_log = load_json(ADI_COST_LOG_PATH, default=[])
+            _adi_log.append(_adi_entry)
+            save_json(ADI_COST_LOG_PATH, _adi_log)
+
         except Exception:
             pass  # never let cost logging break parsing
+        
         # ─────────────────────────────────────────────────────────────────────
 
     except Exception as azure_err:
