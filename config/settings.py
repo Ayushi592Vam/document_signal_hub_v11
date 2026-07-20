@@ -11,6 +11,8 @@ HASH_STORE_PATH         = "/Volumes/documentsignalhub/raw_documents/files/hash_s
 CLAIM_DUP_STORE_PATH    = "/Volumes/documentsignalhub/raw_documents/files/claim_dup_store.json"
 AUDIT_LOG_PATH          = "/Volumes/documentsignalhub/raw_documents/files/audit_log.json"
 JSON_EXPORT_TABLE_PATH  = "/Volumes/documentsignalhub/raw_documents/files/json_export_table.json"
+LLM_COST_LOG_PATH = "/Volumes/documentsignalhub/raw_documents/files/llm_cost_log.json"
+ADI_COST_LOG_PATH  = "/Volumes/documentsignalhub/raw_documents/files/adi_cost_log.json"
 
 # ── Claim-level duplicate store ───────────────────────────────────────────────
 #CLAIM_DUP_STORE_PATH   = "feature_store/claim_dup_store.json"
