@@ -95,6 +95,16 @@ def _llm_call(prompt: str, max_tokens: int = 300, call_purpose: str = "general")
         totals["cost_usd"]       += cost_usd
         totals["calls"]          += 1
 
+        # Persist to the Volume too -- session_state alone is lost on
+        # refresh/restart and can't be aggregated across users/sessions.
+        # Mirrors audit._append_audit()'s load-append-save pattern.
+        from config.settings import LLM_COST_LOG_PATH
+        from modules.volume_io import load_json, save_json
+        _cost_log = load_json(LLM_COST_LOG_PATH, default=[])
+        _cost_log.append({**_usage_entry, "date": datetime.date.today().isoformat()})
+        save_json(LLM_COST_LOG_PATH, _cost_log)
+
+
     except Exception:
         pass   # Never let tracking break the actual LLM call
 
