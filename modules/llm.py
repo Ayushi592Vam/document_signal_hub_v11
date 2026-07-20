@@ -66,6 +66,7 @@ def _llm_call(prompt: str, max_tokens: int = 300, call_purpose: str = "general")
         + completion_tok / 1000 * _PRICE_OUTPUT_PER_1K
     )
 
+   
     # ── Persist to session_state (safe even outside a Streamlit callback) ─────
     try:
         import streamlit as st
@@ -74,7 +75,7 @@ def _llm_call(prompt: str, max_tokens: int = 300, call_purpose: str = "general")
         if "_llm_usage_log" not in st.session_state:
             st.session_state["_llm_usage_log"] = []
 
-        st.session_state["_llm_usage_log"].append({
+        _usage_entry = {
             "ts":             datetime.datetime.now().strftime("%H:%M:%S"),
             "purpose":        call_purpose,
             "model":          model,
@@ -82,7 +83,8 @@ def _llm_call(prompt: str, max_tokens: int = 300, call_purpose: str = "general")
             "output_tokens":  completion_tok,
             "total_tokens":   total_tok,
             "cost_usd":       cost_usd,
-        })
+        }
+        st.session_state["_llm_usage_log"].append(_usage_entry)
 
         # Also keep running totals for quick display
         totals = st.session_state.setdefault("_llm_totals", {
@@ -103,7 +105,6 @@ def _llm_call(prompt: str, max_tokens: int = 300, call_purpose: str = "general")
         _cost_log = load_json(LLM_COST_LOG_PATH, default=[])
         _cost_log.append({**_usage_entry, "date": datetime.date.today().isoformat()})
         save_json(LLM_COST_LOG_PATH, _cost_log)
-
 
     except Exception:
         pass   # Never let tracking break the actual LLM call
