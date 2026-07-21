@@ -17,6 +17,8 @@ from config.settings import (
     CLAIM_DUP_STORE_PATH,
     AUDIT_LOG_PATH,
     JSON_EXPORT_TABLE_PATH,
+    LLM_COST_LOG_PATH,
+    ADI_COST_LOG_PATH,
 )
 from modules.volume_io import load_json, save_json, _get_client
 
