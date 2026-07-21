@@ -96,6 +96,18 @@ def clear_export_table() -> int:
     save_json(JSON_EXPORT_TABLE_PATH, [])
     return count
 
+def clear_llm_cost_log() -> int:
+    data = load_json(LLM_COST_LOG_PATH, default=[])
+    count = len(data)
+    save_json(LLM_COST_LOG_PATH, [])
+    return count
+
+
+def clear_adi_cost_log() -> int:
+    data = load_json(ADI_COST_LOG_PATH, default=[])
+    count = len(data)
+    save_json(ADI_COST_LOG_PATH, [])
+    return count
 
 # ── Stats helpers ─────────────────────────────────────────────────────────────
 
