@@ -125,6 +125,8 @@ def get_cache_stats() -> dict:
     stats["claim_dups"] = {"entries": len(load_json(CLAIM_DUP_STORE_PATH, default={}))}
     stats["audit_log"] = {"entries": len(load_json(AUDIT_LOG_PATH, default=[]))}
     stats["export_table"] = {"entries": len(load_json(JSON_EXPORT_TABLE_PATH, default=[]))}
+    stats["llm_cost_log"] = {"entries": len(load_json(LLM_COST_LOG_PATH, default=[]))}
+    stats["adi_cost_log"] = {"entries": len(load_json(ADI_COST_LOG_PATH, default=[]))}
 
     return stats
 
