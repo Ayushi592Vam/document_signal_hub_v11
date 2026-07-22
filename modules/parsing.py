@@ -22,7 +22,66 @@ from modules.cell_format import format_cell_value_with_fmt
 
 # ── Sheet classifier ──────────────────────────────────────────────────────────
 
-def classify_sheet(rows) -> str:
+def _loss_run_score(text: str) -> int:
+    score = 0
+    if any(x in text for x in [
+        "claim number", "claim no", "claim #", "claim id", "claim_id",
+        "claim ref", "claimant", "file number", "file no", "file num", "file ref",
+    ]):
+        score += 2
+    if any(x in text for x in [
+        "loss date", "date of loss", "loss dt", "accident date",
+        "occurrence date", "incident date", "date of injury", "date of incident",
+        "injury date", "dol",
+    ]):
+        score += 1
+    if any(x in text for x in [
+        "incurred", "paid", "reserve", "outstanding",
+        "total paid", "total incurred", "indemnity", "expense",
+    ]):
+        score += 1
+    return score
+
+
+def _commercial_loss_run_score(text: str) -> int:
+    if "policy" in text and ("claim" in text or "incurred" in text):
+        return 3
+    return 0
+
+
+def _score_to_confidence(top_score: int, margin_ratio: float) -> float:
+    # Confidence depends on BOTH how strong the winning signal is
+    # (top_score) and how far ahead it is of the runner-up (margin_ratio).
+    # A lone weak signal with nothing to compete against should NOT get
+    # near-maximum confidence just because "nothing else scored" -- that
+    # was the flaw in scoring purely on margin.
+    if top_score >= 3:
+        base = 0.65
+    elif top_score == 2:
+        base = 0.50
+    else:
+        base = 0.35
+    return round(min(0.85, base + 0.20 * margin_ratio), 2)
+
+
+def classify_sheet(rows) -> tuple[str, float]:
+    """
+    Returns (sheet_type, confidence) instead of a bare string. Confidence
+    is on the same 0-1 scale used by classification_router's keyword
+    pre-pass for PDF/TXT/HTML, so every parser in the app now reports
+    classification confidence the same way.
+
+    ORDERING NOTE: Check Register's hard trigger runs BEFORE the scored
+    Loss Run / Commercial Loss Run competition, exactly as before -- this
+    is deliberate. An insurance check register legitimately contains
+    Claim Number and Policy Number columns, so if it competed on score
+    against those two, a check register with several claim-reference
+    columns could out-score its own check-register signal and get
+    misclassified as Commercial Loss Run again -- the exact bug this
+    ordering was added to prevent. Confidence for Check Register is
+    computed from how many of its OWN signals fired, not by racing it
+    against the other types.
+    """
     text = " ".join(str(cell).lower() for row in rows[:20] for cell in row if cell)
 
     if "line of business" in text:
@@ -31,16 +90,13 @@ def classify_sheet(rows) -> str:
             "loss ratio", "loss rate", "frequency", "severity",
         ]
         if any(sig in text for sig in summary_co_signals):
-            return "SUMMARY"
+            return "SUMMARY", 0.9
         for row in rows[:20]:
             non_empty = [v for v in row if v is not None and str(v).strip()]
             if non_empty and str(non_empty[0]).lower().strip() == "line of business" and len(non_empty) == 1:
-                return "SUMMARY"
+                return "SUMMARY", 0.9
 
-    # ── Check Register detection ──────────────────────────────────────────
-    # Must run BEFORE the claim/policy signals below: an insurance check
-    # register legitimately has "claim number" and "policy number" columns
-    # and would otherwise be misclassified as COMMERCIAL_LOSS_RUN.
+    # ── Check Register detection (hard trigger, ordering unchanged) ────────
     has_check_no = any(x in text for x in [
         "check number", "check no.", "check no", "check #", "check num",
         "cheque number", "cheque no",
@@ -50,29 +106,24 @@ def classify_sheet(rows) -> str:
         "running total", "running balance", "payment/debit", "deposit/credit", "balance",
     ])
     if has_check_no and (has_payee or has_register_ledger):
-        return "CHECK_REGISTER"
-      
-    has_claim = any(x in text for x in [
-        "claim number", "claim no", "claim #", "claim id", "claim_id",
-        "claim ref", "claimant", "file number", "file no", "file num",
-        "file ref",
-    ])
-    has_loss = any(x in text for x in [
-        "loss date", "date of loss", "loss dt", "accident date",
-        "occurrence date", "incident date", "date of injury", "date of incident",
-        "injury date", "dol",
-    ])
-    has_fin = any(x in text for x in [
-        "incurred", "paid", "reserve", "outstanding",
-        "total paid", "total incurred", "indemnity", "expense",
-    ])
-    if has_claim and (has_loss or has_fin):
-        return "LOSS_RUN"
-    if "policy" in text and ("claim" in text or "incurred" in text):
-        return "COMMERCIAL_LOSS_RUN"
-    if has_claim:
-        return "LOSS_RUN"
-    return "UNKNOWN"
+        signal_count = sum([has_check_no, has_payee, has_register_ledger])
+        confidence   = min(0.85, 0.55 + 0.10 * signal_count)
+        return "CHECK_REGISTER", round(confidence, 2)
+
+    # ── Loss Run vs. Commercial Loss Run: scored competition ────────────────
+    scores = {
+        "LOSS_RUN":            _loss_run_score(text),
+        "COMMERCIAL_LOSS_RUN": _commercial_loss_run_score(text),
+    }
+    ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
+    top_type, top_score = ranked[0]
+    second_score = ranked[1][1]
+
+    if top_score == 0:
+        return "UNKNOWN", 0.0
+
+    margin_ratio = (top_score - second_score) / max(top_score, 1)
+    return top_type, _score_to_confidence(top_score, margin_ratio)
 
 
 # ── Legacy-layout detector ────────────────────────────────────────────────────
