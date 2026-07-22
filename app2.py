@@ -363,7 +363,7 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
         uploaded.name,
         get_pdf_sheet_names,
         excel_path,
-     )
+    )
 
         # ── Show Azure error banner and stop if the parse failed ──────────────
         # parse_pdf_with_azure() stores the error in session state; we surface
@@ -385,7 +385,7 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
     elif file_ext == ".txt":
 
         file_bytes = open(excel_path, "rb").read()
-    
+
         parsed = run_with_lineage(
             "FILE_PARSED",
             uploaded.name,
@@ -393,16 +393,16 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
             file_bytes,
             uploaded.name,
         )
-    
+
         intelligence = run_with_lineage(
             "FILE_ENRICHED",
             uploaded.name,
             run_pdf_intelligence,
             parsed,
         )
-    
+
         intelligence["source"] = "txt"
-    
+
         st.session_state["_pdf_intelligence"] = intelligence
         st.session_state["_pdf_intelligence_file"] = excel_path
         st.session_state["sheet_names"] = ["Transcript"]
@@ -410,9 +410,9 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
     elif file_ext in (".html", ".htm"):
 
         file_bytes = open(excel_path, "rb").read()
-    
+
         from modules.html_parser import parse_html_file
-    
+
         parsed = run_with_lineage(
             "FILE_PARSED",
             uploaded.name,
@@ -420,22 +420,22 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
             file_bytes,
             uploaded.name,
         )
-    
+
         intelligence = run_with_lineage(
             "FILE_ENRICHED",
             uploaded.name,
             run_pdf_intelligence,
             parsed,
         )
-    
+
         intelligence["source"] = "html"
-    
+
         st.session_state["_pdf_intelligence"] = intelligence
         st.session_state["_pdf_intelligence_file"] = excel_path
         st.session_state["sheet_names"] = ["Document"]
     
     else:
-       st.session_state.sheet_names = get_sheet_names(excel_path)
+        st.session_state.sheet_names = get_sheet_names(excel_path)
     
     st.session_state.sheet_cache  = {}
     st.session_state.selected_idx = 0
@@ -896,7 +896,6 @@ if file_ext in (".pdf", ".txt", ".html", ".htm") and _intelligence:
         tags=[f"doctype:{_intelligence.get('doc_type', 'unknown')}"],
     )
 
-
 # ── Auto-normalize ────────────────────────────────────────────────────────────
 _active_schema_now = st.session_state.get("active_schema")
 _normalized_for    = active.get("_normalized_for")
@@ -922,9 +921,31 @@ if data and file_ext != ".pdf":
     )
     _needs_llm_map = _has_unknown_fields(_sample_keys, _ref_schema)
     if _needs_llm_map:
-        _llm_map_result = llm_map_unknown_fields(data[:5], _ref_schema, selected_sheet)
-        _llm_map_count  = len(_llm_map_result.get("mappings", {}))
-        _llm_map_ran    = _llm_map_count > 0
+        
+        from modules.semantic_mapping import semantic_match_field
+        from modules.normalization import _best_standard_name
+        # Only run the (paid) semantic layer on columns the free rule-based
+        # matcher genuinely couldn't resolve -- not on every column in the sheet
+        _unmapped_cols = [c for c in _sample_keys if not _best_standard_name(c)]
+
+        candidate_fields = SCHEMAS[_ref_schema]["accepted_fields"]
+        _semantic_mapped = {}
+        _still_unmapped = []
+        for col in _unmapped_cols:
+            matched_field, score = semantic_match_field(col, candidate_fields)
+            if matched_field:
+                _semantic_mapped[col] = matched_field
+            else:
+                _still_unmapped.append(col)
+
+        if _still_unmapped:
+            _llm_map_result = llm_map_unknown_fields(data[:5], _ref_schema, selected_sheet)
+            _llm_map_result.setdefault("mappings", {}).update(_semantic_mapped)
+        else:
+            _llm_map_result = {"mappings": _semantic_mapped}
+        _llm_map_count = len(_llm_map_result.get("mappings", {}))
+        _llm_map_ran   = _llm_map_count > 0
+        
         if _llm_map_ran:
             active["_llm_field_map"] = _llm_map_result
             _llm_mappings    = _llm_map_result.get("mappings", {})
@@ -1017,7 +1038,7 @@ else:
     if _frozen_id_key not in st.session_state:
         st.session_state[_frozen_id_key] = detect_claim_id(curr_claim)
     curr_claim_id = st.session_state[_frozen_id_key]
-
+    
     # Cause-of-Loss is a claims concept -- skip it for check registers,
     # where "description"/"memo" columns are payee memos, not loss
     # narratives. Without this it burns an LLM call trying to force a
@@ -1057,19 +1078,19 @@ else:
 
     with col_fmt:
         render_export_panel(
-            data=data,
+            data=data, 
             curr_claim=curr_claim,
             curr_claim_id=curr_claim_id,
             selected_sheet=selected_sheet,
             sh_hash=sh_hash,
-            file_hash=file_hash,
-            uploaded_name=uploaded.name,
+            file_hash=file_hash,  # ← add this
+            uploaded_name=uploaded.name, 
             SCHEMAS=SCHEMAS,
-            merged_meta=merged_meta,
-            totals_data=totals_data,
+            merged_meta=merged_meta, 
+            totals_data=totals_data, 
             title_fields=title_fields,
             _llm_map_result=_llm_map_result,
-        )
+            )
 
 hide_st_style = """
 <style>
