@@ -1090,6 +1090,7 @@ else:
             totals_data=totals_data, 
             title_fields=title_fields,
             _llm_map_result=_llm_map_result,
+            sheet_type=sheet_type, 
             )
 
 hide_st_style = """
