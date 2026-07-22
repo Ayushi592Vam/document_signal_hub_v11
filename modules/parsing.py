@@ -563,18 +563,16 @@ def extract_sheet_title_kvs(
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def extract_from_excel(
-    file_path: str,
-    sheet_name: str,
-) -> tuple[list, str, dict]:
+def extract_from_excel(file_path: str, sheet_name: str) -> tuple[list, str, dict, float]:  # ← return type gains float
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".csv":
         with open(file_path, "r", encoding="utf-8-sig") as f:
             rows = list(csv.reader(f))
         if not rows:
-            return [], "UNKNOWN", {}
-        claims, sheet_type = parse_rows(classify_sheet(rows), rows)
-        return claims, sheet_type, {}
+            return [], "UNKNOWN", {}, 0.0
+        sheet_type, sheet_confidence = classify_sheet(rows)          # ← was: classify_sheet(rows) passed inline
+        claims, sheet_type = parse_rows(sheet_type, rows)
+        return claims, sheet_type, {}, sheet_confidence               # ← confidence added
     else:
         wb        = openpyxl.load_workbook(file_path, data_only=True)
         ws        = wb[sheet_name]
@@ -582,13 +580,12 @@ def extract_from_excel(
         cell_rows = [list(row) for row in ws.iter_rows()]
         wb.close()
         if not raw_rows:
-            return [], "UNKNOWN", {}
-
-        sheet_type = classify_sheet(raw_rows)
+            return [], "UNKNOWN", {}, 0.0
+        sheet_type, sheet_confidence = classify_sheet(raw_rows)       # ← was: sheet_type = classify_sheet(raw_rows)
         hri        = _find_header_row(raw_rows)
         title_kvs  = extract_sheet_title_kvs(raw_rows, cell_rows, hri, sheet_name)
         claims, sheet_type = parse_rows_with_cells(sheet_type, raw_rows, cell_rows)
-        return claims, sheet_type, title_kvs
+        return claims, sheet_type, title_kvs, sheet_confidence        # ← confidence added
 
 
 # ── Row parsers ───────────────────────────────────────────────────────────────
