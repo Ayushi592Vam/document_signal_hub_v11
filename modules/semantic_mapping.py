@@ -23,10 +23,10 @@ _field_embedding_cache: dict[str, list[float]] = {}
 
 
 def _get_embedding(text: str) -> list[float]:
-    endpoint   = os.environ.get("OPENAI_DEPLOYMENT_ENDPOINT", "").rstrip("/")
-    api_key    = os.environ.get("OPENAI_API_KEY", "")
+    endpoint   = os.environ.get("OPENAI_EMBEDDING_ENDPOINT", "").rstrip("/")
+    api_key    = os.environ.get("OPENAI_EMBEDDING_API_KEY", "")
     api_ver    = os.environ.get("OPENAI_API_VERSION", "2024-12-01-preview")
-    deployment = os.environ.get("OPENAI_EMBEDDING_DEPLOYMENT_NAME", "text-embedding-3-small")
+    deployment = os.environ.get("OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small")
     url = f"{endpoint}/openai/deployments/{deployment}/embeddings?api-version={api_ver}"
     payload = json.dumps({"input": text}).encode()
     req = urllib.request.Request(
