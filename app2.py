@@ -720,6 +720,7 @@ if selected_sheet not in st.session_state.sheet_cache:
                 data           = _excel_result[0]
                 sheet_type     = _excel_result[1]
                 _title_kvs_raw = _excel_result[2] if len(_excel_result) > 2 else {}
+                _sheet_confidence = _excel_result[3] if len(_excel_result) > 3 else None
 
                 if not data:
                     st.warning(f"No data found in sheet '{selected_sheet}'.")
