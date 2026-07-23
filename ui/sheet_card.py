@@ -77,9 +77,9 @@ def render_sheet_card(
     # signal gets flagged here instead of silently trusted.
     if sheet_confidence is not None and sheet_confidence < 0.65:
         st.warning(
-            f"⚠ **Classified as {sheet_type.replace('_', ' ').title()} with only "
-            f"{sheet_confidence:.0%} confidence.** The keyword signals for this "
-            f"sheet were weak or ambiguous — worth a quick manual check."
+            f"⚠ **This document's classification confidence is only "
+            f"{sheet_confidence:.0%}.** The signals used to identify its type "
+            f"were weak or ambiguous — worth a quick manual check."
         )
 
     # ── Title metadata KV card ────────────────────────────────────────────────
