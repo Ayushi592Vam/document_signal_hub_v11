@@ -322,15 +322,26 @@ def render_export_panel(
             key=f"dl_std_json_{selected_sheet}",
         )
 
-    # Schema export
+    # Schema export — Loss Run only. Guidewire/Duck Creek are claims-shaped
+    # schemas (Claim Status, Line of Business, Reserve); a Check Register
+    # has none of those naturally, so offering this here just produces a
+    # mostly-empty export. Standard JSON above still works for any sheet type.
     st.markdown("<hr>", unsafe_allow_html=True)
-    st.markdown("<p class='section-lbl'>🔌 Schema Export</p>", unsafe_allow_html=True)
-    _schema_sel = st.selectbox(
-        "Schema export format",
-        options=["— Select schema format —", "🔵 Guidewire (JSON)", "🟡 Duck Creek (JSON)"],
-        key=f"schema_export_sel_{selected_sheet}",
-        label_visibility="collapsed",
-    )
+    if sheet_type == "CHECK_REGISTER":
+        st.markdown("<p class='section-lbl'>🔌 Schema Export</p>", unsafe_allow_html=True)
+        st.info(
+            "Guidewire and Duck Creek exports are built for claims data "
+            "(Claim Status, Reserve, Line of Business) and aren't offered "
+            "for Check Registers — use **Standard JSON** above instead."
+        )
+    else:
+        st.markdown("<p class='section-lbl'>🔌 Schema Export</p>", unsafe_allow_html=True)
+        _schema_sel = st.selectbox(
+            "Schema export format",
+            options=["— Select schema format —", "🔵 Guidewire (JSON)", "🟡 Duck Creek (JSON)"],
+            key=f"schema_export_sel_{selected_sheet}",
+            label_visibility="collapsed",
+        )
 
     if _schema_sel and _schema_sel != "— Select schema format —":
         if st.button("⬇ Generate Export", use_container_width=True, key=f"schema_export_go_{selected_sheet}"):
