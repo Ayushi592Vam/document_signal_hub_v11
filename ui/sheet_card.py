@@ -19,6 +19,7 @@ def render_sheet_card(
     from_cache: bool,
     sheet_dup_info: dict,
     title_kvs: dict | None = None,
+    sheet_confidence: float | None = None,
 ) -> None:
     totals_cls   = "hi" if totals_data else "mid"
     totals_found = "Found" if totals_data else "None"
@@ -68,6 +69,18 @@ def render_sheet_card(
         "</div>"
     )
     st.markdown(html, unsafe_allow_html=True)
+
+    # ── Low-confidence classification warning ───────────────────────────────
+    # Mirrors the manual_review flag PDF/TXT/HTML already surface --
+    # Excel/CSV classification now reports a real confidence number too
+    # (see modules.parsing.classify_sheet), so a weak/ambiguous keyword
+    # signal gets flagged here instead of silently trusted.
+    if sheet_confidence is not None and sheet_confidence < 0.65:
+        st.warning(
+            f"⚠ **Classified as {sheet_type.replace('_', ' ').title()} with only "
+            f"{sheet_confidence:.0%} confidence.** The keyword signals for this "
+            f"sheet were weak or ambiguous — worth a quick manual check."
+        )
 
     # ── Title metadata KV card ────────────────────────────────────────────────
     if title_kvs:
