@@ -716,6 +716,7 @@ if selected_sheet not in st.session_state.sheet_cache:
             # ── Excel / CSV branch ────────────────────────────────────────────
             else:
                 _doc_type_enum = None
+                _sheet_confidence = None   # NEW — only Excel/CSV sets this to a real number
                 _excel_result  = run_with_lineage("FILE_PARSED", uploaded.name, extract_from_excel, excel_path, selected_sheet)
                 data           = _excel_result[0]
                 sheet_type     = _excel_result[1]
@@ -756,6 +757,7 @@ if selected_sheet not in st.session_state.sheet_cache:
                 "totals":         totals_data,
                 "title_fields":   _title_flds,
                 "sheet_type":     sheet_type,
+                "sheet_confidence":  _sheet_confidence if file_ext not in (".pdf",".txt") else None,  # NEW
                 "total_rows":     total_rows,
                 "total_cols":     total_cols,
                 "sheet_hash":     sh_hash,
@@ -821,6 +823,7 @@ if selected_sheet not in st.session_state.sheet_cache:
             "totals":         totals_data,
             "title_fields":   _title_flds,
             "sheet_type":     sheet_type,
+            "sheet_confidence":  _sheet_confidence if file_ext not in (".pdf",".txt") else None,  # NEW
             "total_rows":     total_rows,
             "total_cols":     total_cols,
             "sheet_hash":     sh_hash,
@@ -856,6 +859,7 @@ merged_meta  = active.get("merged_meta", {})
 totals_data  = active.get("totals", {})
 title_fields = active.get("title_fields", {})
 sheet_type   = active.get("sheet_type", "UNKNOWN")
+sheet_confidence  = active.get("sheet_confidence")   # NEW
 total_rows   = active.get("total_rows", 0)
 total_cols   = active.get("total_cols", 0)
 sh_hash      = active.get("sheet_hash", "")
@@ -1002,6 +1006,7 @@ if file_ext not in (".pdf", ".txt"):
         total_rows, total_cols, len(merged_meta), totals_data,
         len(title_fields), _from_cache, sheet_dup_info,
         title_kvs=title_fields,
+        sheet_confidence=sheet_confidence,   # NEW
     )
     if _llm_map_ran:
         from ui.sheet_card import render_llm_map_banner
