@@ -690,6 +690,15 @@ if selected_sheet not in st.session_state.sheet_cache:
                     for f in word_result.get("fields", [])[:8]
                     if f.get("field_name")
                 }
+                # NEW — surface the classification label somewhere visible.
+                # sheet_card.py already renders any key in title_kvs generically,
+                # so this is free real-estate rather than new UI code.
+                if _word_classification.get("doc_type_label"):
+                    _title_flds["Document Classification"] = {
+                        "value":    _word_classification["doc_type_label"],
+                        "modified": _word_classification["doc_type_label"],
+                    }
+                
                 if not selected_sheet:
                     selected_sheet = "Document"
                 try:
