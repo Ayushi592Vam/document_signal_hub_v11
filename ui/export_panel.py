@@ -51,7 +51,7 @@ def render_export_panel(
     data, curr_claim, curr_claim_id, selected_sheet,
     sh_hash, file_hash, uploaded_name, SCHEMAS,
     merged_meta, totals_data, title_fields,
-    _llm_map_result,
+    _llm_map_result, sheet_type: str = "UNKNOWN",
 ):
     active_schema = st.session_state.get("active_schema", None)
     use_conf      = st.session_state.get("use_conf_threshold", False)
