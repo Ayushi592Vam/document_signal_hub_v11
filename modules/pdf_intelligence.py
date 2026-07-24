@@ -189,11 +189,7 @@ def _get_openai_client_enhanced():
         api_key  = os.environ.get("OPENAI_API_KEY_ENHANCED") \
                    or os.environ.get("OPENAI_API_KEY", "")
         
-        # ── TEMP DEBUG — remove after fixing ─────────────────────────────────
-        print(f"[ENHANCED CLIENT] endpoint={endpoint[:40] if endpoint else 'MISSING'}")
-        print(f"[ENHANCED CLIENT] key={'SET' if api_key else 'MISSING'}")
-        print(f"[ENHANCED CLIENT] model={_deployment_enhanced()}")
-        # ─────────────────────────────────────────────────────────────────────
+        
         
         return AzureOpenAI(
             azure_endpoint=endpoint,
@@ -201,9 +197,9 @@ def _get_openai_client_enhanced():
             api_version=os.environ.get("OPENAI_API_VERSION", "2024-12-01-preview"),
         )
     except Exception as e:
-        print(f"[ENHANCED CLIENT] FAILED: {e}")   # ← TEMP DEBUG
+        from modules.audit import _log_error
+        _log_error("ENHANCED_CLIENT_INIT", "unknown", e)
         return None
-
 
 # ─────────────────────────────────────────────────────────────────────────────
 # JSON REPAIR  — handle truncated responses from token-limit hits
@@ -265,11 +261,11 @@ def _llm_call(
     label: str = "llm_call",
     use_enhanced: bool = False,
 ) -> dict | None:
-    print(f"[_llm_call] label={label} use_enhanced={use_enhanced}")
+    
     client = _get_openai_client_enhanced() if use_enhanced else _get_openai_client()
     if not client:
         _debug_store(label, "ERROR: no client (check OPENAI env vars)")
-        print(f"[LLM CALL] No client for label={label} use_enhanced={use_enhanced}")
+       
         return None
 
     model = _deployment_enhanced() if use_enhanced else _deployment_standard()
@@ -326,11 +322,11 @@ def _llm_call(
 
     except json.JSONDecodeError as e:
         _debug_store(label + "_parse_error", str(e))
-        print(f"[LLM CALL JSON ERROR] {label}: {e}")
+        
         return None
     except Exception as e:
         _debug_store(label + "_error", str(e))
-        print(f"[LLM CALL ERROR] {label}: {e}")
+        
         return None
 
 def _debug_store(key: str, value: str) -> None:
@@ -1714,7 +1710,7 @@ def analyse_document(
                 })
         except Exception:
             pass
-      
+        
         for _, ed in entities.items():
             if isinstance(ed, dict):
                 ed.setdefault("azure_di_key", None)
@@ -2076,13 +2072,6 @@ def run_validation(
     azure_di_fields: dict | None = None,
 ) -> dict:
     subtype = detect_subtype(doc_type, full_text)
-
-
-
-    # ── TEMP DEBUG ────────────────────────────────────────────────
-    print(f"[VALIDATION] Starting with model: {_deployment_enhanced()}")
-    print(f"[VALIDATION] Client: {_get_openai_client_enhanced()}")
-    # ─────────────────────────────────────────────────────────────
 
 
     entity_summary = json.dumps(
