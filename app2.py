@@ -714,13 +714,13 @@ if selected_sheet not in st.session_state.sheet_cache:
 
             # ── Excel / CSV branch ────────────────────────────────────────────
             else:
-                _doc_type_enum    = None
+                _doc_type_enum = None
                 _sheet_confidence = None
-                try:
+                try:                                                                          # NEW
                     _excel_result = run_with_lineage("FILE_PARSED", uploaded.name, extract_from_excel, excel_path, selected_sheet)
-                except ValueError as _e:
-                    st.error(f"⚠ {_e}")
-                    st.stop()
+                except ValueError as _e:                                                       # NEW
+                    st.error(f"⚠ {_e}")                                                        # NEW
+                    st.stop()                                                                  # NEW
                 data           = _excel_result[0]
                 sheet_type     = _excel_result[1]
                 _title_kvs_raw = _excel_result[2] if len(_excel_result) > 2 else {}
@@ -729,6 +729,14 @@ if selected_sheet not in st.session_state.sheet_cache:
                 if not data:
                     st.warning(f"No data found in sheet '{selected_sheet}'.")
                     st.stop()
+
+                _n_uncalc = _warn_uncalculated_formulas(excel_path, selected_sheet)             # NEW
+                if _n_uncalc > 0:                                                               # NEW
+                    st.warning(                                                                 # NEW
+                        f"⚠ {_n_uncalc} cell(s) in this sheet contain formulas that "            # NEW
+                        f"haven't been calculated by Excel yet — those values will appear "      # NEW
+                        f"blank until the workbook is opened and saved in Excel once."           # NEW
+                    )                                                                           # NEW
 
                 merged_meta = extract_merged_cell_metadata(excel_path, selected_sheet)
                 totals_data = extract_totals_row(excel_path, selected_sheet)
