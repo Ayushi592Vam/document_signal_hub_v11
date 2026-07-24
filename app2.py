@@ -218,6 +218,7 @@ def _parse_pdf(file_path: str):
     Never raises — errors are stored in session state by parse_pdf_with_azure().
     """
     from modules.pdf_azure_parser import parse_pdf_with_azure
+    from modules.canonical import to_canonical_fields
     result = parse_pdf_with_azure(file_path)
     data   = []
     for page in result.get("pages", []):
@@ -252,9 +253,27 @@ def _parse_pdf(file_path: str):
                 "source_col":       None,
             }
         if row:
-            data.append(row)
+            data.append(to_canonical_fields(row, source_type="pdf"))
     return data, "PDF", None, result
 
+
+def _run_intelligence(parsed_or_azure_result, filename: str) -> dict:
+    """
+    Shared by all 4 call sites that invoke run_pdf_intelligence() (PDF's
+    two spots, TXT, HTML) -- one shared try/except instead of 4 near-
+    identical copies. Does NOT re-check output shape here: run_pdf_
+    intelligence() already calls validate_extraction_output() internally
+    on every invocation, so re-checking here would just be a redundant
+    duplicate of a guardrail that's already applied at the source.
+    """
+    from modules.pdf_intelligence import run_pdf_intelligence
+    from modules.audit import _log_error
+    try:
+        return run_with_lineage("FILE_ENRICHED", filename, run_pdf_intelligence, parsed_or_azure_result)
+    except Exception as _e:
+        _log_error("PDF_INTELLIGENCE", filename, _e)
+        return {}
+    
 
 def _doc_type_enum_to_label(doc_type_enum) -> str | None:
     """Convert a doc-type enum to a human-readable label."""
@@ -383,56 +402,23 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
 
     # ADD this alongside your existing elif blocks:
     elif file_ext == ".txt":
-
-        file_bytes = open(excel_path, "rb").read()
-
-        parsed = run_with_lineage(
-            "FILE_PARSED",
-            uploaded.name,
-            parse_txt_file,
-            file_bytes,
-            uploaded.name,
-        )
-
-        intelligence = run_with_lineage(
-            "FILE_ENRICHED",
-            uploaded.name,
-            run_pdf_intelligence,
-            parsed,
-        )
-
+        file_bytes   = open(excel_path, "rb").read()
+        parsed       = run_with_lineage("FILE_PARSED", uploaded.name, parse_txt_file, file_bytes, uploaded.name)
+        intelligence = _run_intelligence(parsed, uploaded.name)
         intelligence["source"] = "txt"
-
-        st.session_state["_pdf_intelligence"] = intelligence
+        st.session_state["_pdf_intelligence"]      = intelligence
         st.session_state["_pdf_intelligence_file"] = excel_path
-        st.session_state["sheet_names"] = ["Transcript"]
+        st.session_state["sheet_names"]            = ["Transcript"]
 
     elif file_ext in (".html", ".htm"):
-
         file_bytes = open(excel_path, "rb").read()
-
         from modules.html_parser import parse_html_file
-
-        parsed = run_with_lineage(
-            "FILE_PARSED",
-            uploaded.name,
-            parse_html_file,
-            file_bytes,
-            uploaded.name,
-        )
-
-        intelligence = run_with_lineage(
-            "FILE_ENRICHED",
-            uploaded.name,
-            run_pdf_intelligence,
-            parsed,
-        )
-
+        parsed       = run_with_lineage("FILE_PARSED", uploaded.name, parse_html_file, file_bytes, uploaded.name)
+        intelligence = _run_intelligence(parsed, uploaded.name)
         intelligence["source"] = "html"
-
-        st.session_state["_pdf_intelligence"] = intelligence
+        st.session_state["_pdf_intelligence"]      = intelligence
         st.session_state["_pdf_intelligence_file"] = excel_path
-        st.session_state["sheet_names"] = ["Document"]
+        st.session_state["sheet_names"]            = ["Document"]
     
     else:
         st.session_state.sheet_names = get_sheet_names(excel_path)
@@ -652,47 +638,37 @@ if selected_sheet not in st.session_state.sheet_cache:
                         }
 
                 # ── Run PDF intelligence pipeline (only once per file) ─────────
+               
                 _intel_file_key = "_pdf_intelligence_file"
                 _intel_key      = "_pdf_intelligence"
                 if st.session_state.get(_intel_file_key) != excel_path:
                     with st.spinner("🧠 Running document analysis…"):
-                        try:
-                            from modules.pdf_intelligence import run_pdf_intelligence
-                            from modules.pdf_azure_parser import parse_pdf_with_azure
-                            _parsed_for_intel = run_with_lineage("FILE_PARSED", uploaded.name, parse_pdf_with_azure, excel_path)
-                            _check_and_show_azure_error(stop_on_error=False)
-                            _intel = run_with_lineage("FILE_ENRICHED", uploaded.name, run_pdf_intelligence, _parsed_for_intel)
-                            st.session_state[_intel_key]      = _intel
-                            st.session_state[_intel_file_key] = excel_path
-                        except Exception as _e:
-                            from modules.audit import _log_error
-                            _log_error("PDF_INTELLIGENCE", uploaded.name, _e)
-                            st.session_state[_intel_key]      = {}
-                            st.session_state[_intel_file_key] = excel_path
+                        from modules.pdf_azure_parser import parse_pdf_with_azure
+                        _parsed_for_intel = run_with_lineage("FILE_PARSED", uploaded.name, parse_pdf_with_azure, excel_path)
+                        _check_and_show_azure_error(stop_on_error=False)
+                        st.session_state[_intel_key]      = _run_intelligence(_parsed_for_intel, uploaded.name)
+                        st.session_state[_intel_file_key] = excel_path
+                        
 
             # ── DOCX branch ───────────────────────────────────────────────────
             elif file_ext == ".docx":
-                word_result     = run_with_lineage("FILE_PARSED", uploaded.name, parse_word, excel_path, llm_client=None)
-                parsed_rows     = [_word_fields_to_row(word_result.get("fields", []))]
-                data            = parsed_rows
-                sheet_type      = "WORD_DOCUMENT"
-                merged_meta     = {}
-                totals_data     = {}
-                total_rows      = len(parsed_rows)
-                total_cols      = len(parsed_rows[0]) if parsed_rows else 0
-                _col_rename_log = {}
-                _doc_type_enum  = None
-                _title_flds     = {
-                    f["field_name"]: {
-                        "value":    f.get("value", ""),
-                        "modified": f.get("value", "")
-                    }
+                word_result           = run_with_lineage("FILE_PARSED", uploaded.name, parse_word, excel_path, llm_client=None)
+                parsed_rows           = [_word_fields_to_row(word_result.get("fields", []))]
+                data                  = parsed_rows
+                sheet_type            = "WORD_DOCUMENT"
+                _word_classification  = word_result.get("doc_classification", {})   # RESTORE THIS
+                _sheet_confidence     = _word_classification.get("confidence")       # RESTORE THIS
+                merged_meta           = {}
+                totals_data           = {}
+                total_rows            = len(parsed_rows)
+                total_cols            = len(parsed_rows[0]) if parsed_rows else 0
+                _col_rename_log       = {}
+                _doc_type_enum        = None
+                _title_flds           = {
+                    f["field_name"]: {"value": f.get("value", ""), "modified": f.get("value", "")}
                     for f in word_result.get("fields", [])[:8]
                     if f.get("field_name")
                 }
-                # NEW — surface the classification label somewhere visible.
-                # sheet_card.py already renders any key in title_kvs generically,
-                # so this is free real-estate rather than new UI code.
                 if _word_classification.get("doc_type_label"):
                     _title_flds["Document Classification"] = {
                         "value":    _word_classification["doc_type_label"],
@@ -701,6 +677,7 @@ if selected_sheet not in st.session_state.sheet_cache:
                 
                 if not selected_sheet:
                     selected_sheet = "Document"
+                
                 try:
                     sh_hash = _compute_sheet_sha256(excel_path, selected_sheet)
                 except Exception:
@@ -721,6 +698,19 @@ if selected_sheet not in st.session_state.sheet_cache:
                 _col_rename_log = {}
                 _doc_type_enum  = None
                 _title_flds     = {}   
+
+            # ── HTML branch ───────────────────────────────────────────────────
+            elif file_ext in (".html", ".htm"):
+                data            = []   # entities are served from _pdf_intelligence, same as TXT
+                sheet_type      = "HTML_DOCUMENT"
+                merged_meta     = {}
+                totals_data     = {}
+                total_rows      = 0
+                total_cols      = 0
+                _col_rename_log = {}
+                _doc_type_enum  = None
+                _title_flds     = {}
+   
 
             # ── Excel / CSV branch ────────────────────────────────────────────
             else:
@@ -766,7 +756,7 @@ if selected_sheet not in st.session_state.sheet_cache:
                 "totals":         totals_data,
                 "title_fields":   _title_flds,
                 "sheet_type":     sheet_type,
-                "sheet_confidence":  _sheet_confidence if file_ext not in (".pdf",".txt") else None,  # NEW
+                "sheet_confidence": _sheet_confidence if file_ext not in (".pdf", ".txt", ".html", ".htm") else None,
                 "total_rows":     total_rows,
                 "total_cols":     total_cols,
                 "sheet_hash":     sh_hash,
@@ -816,6 +806,7 @@ if selected_sheet not in st.session_state.sheet_cache:
         totals_data     = {}
         _title_flds     = {}
         _col_rename_log = {}
+        _sheet_confidence = None
         try:
             merged_meta = extract_merged_cell_metadata(excel_path, selected_sheet)
             totals_data = extract_totals_row(excel_path, selected_sheet)
@@ -832,7 +823,7 @@ if selected_sheet not in st.session_state.sheet_cache:
             "totals":         totals_data,
             "title_fields":   _title_flds,
             "sheet_type":     sheet_type,
-            "sheet_confidence":  _sheet_confidence if file_ext not in (".pdf",".txt") else None,  # NEW
+            "sheet_confidence": _sheet_confidence if file_ext not in (".pdf", ".txt", ".html", ".htm") else None,
             "total_rows":     total_rows,
             "total_cols":     total_cols,
             "sheet_hash":     sh_hash,
@@ -875,22 +866,16 @@ sh_hash      = active.get("sheet_hash", "")
 _from_cache  = active.get("_from_cache", False)
 
 
+
 # ── Ensure PDF intelligence runs even when sheet data loaded from cache ───────
 if file_ext == ".pdf" and st.session_state.get("_pdf_intelligence_file") != excel_path:
     with st.spinner("🧠 Running document analysis…"):
-        try:
-            from modules.pdf_intelligence import run_pdf_intelligence
-            from modules.pdf_azure_parser import parse_pdf_with_azure
-            _parsed_for_intel = run_with_lineage("FILE_PARSED", uploaded.name, parse_pdf_with_azure, excel_path)
-            _check_and_show_azure_error(stop_on_error=False)
-            _intel = run_with_lineage("FILE_ENRICHED", uploaded.name, run_pdf_intelligence, _parsed_for_intel)
-            st.session_state["_pdf_intelligence"]      = _intel
-            st.session_state["_pdf_intelligence_file"] = excel_path
-        except Exception as _e:
-            from modules.audit import _log_error
-            _log_error("PDF_INTELLIGENCE", uploaded.name, _e)
-            st.session_state["_pdf_intelligence"]      = {}
-            st.session_state["_pdf_intelligence_file"] = excel_path
+        from modules.pdf_azure_parser import parse_pdf_with_azure
+        _parsed_for_intel = run_with_lineage("FILE_PARSED", uploaded.name, parse_pdf_with_azure, excel_path)
+        _check_and_show_azure_error(stop_on_error=False)
+        st.session_state["_pdf_intelligence"]      = _run_intelligence(_parsed_for_intel, uploaded.name)
+        st.session_state["_pdf_intelligence_file"] = excel_path
+       
 
 
 # ── Determine if this PDF needs the intelligence panel ────────────────────────
@@ -1009,7 +994,7 @@ if not _use_intel_panel:
 #     render_llm_map_banner(_llm_map_result, _llm_map_count)
 
 # ── Sheet card ────────────────────────────────────────────────────────────────
-if file_ext not in (".pdf", ".txt"):
+if file_ext not in (".pdf", ".txt", ".html", ".htm"):
     render_sheet_card(
         selected_sheet, sheet_type, sh_hash, len(data),
         total_rows, total_cols, len(merged_meta), totals_data,
