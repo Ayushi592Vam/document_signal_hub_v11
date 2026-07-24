@@ -329,6 +329,43 @@ def _llm_call(
         
         return None
 
+def _llm_call_with_retry(
+    system_prompt: str,
+    user_prompt: str,
+    max_tokens: int,
+    label: str,
+    use_enhanced: bool = False,
+    shrink_on_retry: bool = False,
+) -> dict | None:
+    """
+    Unified retry entry point for the three analyse_document() calls.
+
+    shrink_on_retry=True (entities): first attempt uses the full prompt;
+    on failure, retries ONCE with the prompt truncated to 60% length --
+    this targets the actual observed failure mode for entity extraction
+    (large documents hitting token limits), which a same-input retry
+    wouldn't fix.
+
+    shrink_on_retry=False (signals, summary/judge): uses orchestrator.
+    with_retry() for a plain same-input retry -- targets transient
+    failures (network blips, momentary API errors), where retrying the
+    identical prompt is the correct strategy.
+    """
+    if shrink_on_retry:
+        result = _llm_call(system_prompt, user_prompt, max_tokens, label, use_enhanced)
+        if result is None:
+            _debug_store(label + "_retry_triggered", "First attempt returned None")
+            result = _llm_call(
+                system_prompt,
+                user_prompt[: int(len(user_prompt) * 0.6)],
+                max_tokens, label + "_retry", use_enhanced,
+            )
+        return result
+    return with_retry(
+        lambda: _llm_call(system_prompt, user_prompt, max_tokens, label, use_enhanced),
+        max_attempts=2,
+    )
+
 def _debug_store(key: str, value: str) -> None:
     if os.environ.get("PDF_INTEL_DEBUG", "0") != "1":
         return
