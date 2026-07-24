@@ -18,7 +18,7 @@ import re
 import openpyxl
 
 from modules.cell_format import format_cell_value_with_fmt
-
+MAX_EXCEL_ROWS = 50_000  # sanity ceiling — a legitimate loss run is nowhere near this
 
 # ── Sheet classifier ──────────────────────────────────────────────────────────
 
@@ -560,32 +560,75 @@ def extract_sheet_title_kvs(
 
     return found
 
+def _warn_uncalculated_formulas(file_path: str, sheet_name: str) -> int:
+    """Detects cells with a formula but no cached value (data_only=True
+    would silently return None for these). Read-only scan — doesn't
+    affect extraction, just surfaces a count for a UI warning. Only
+    meaningful for .xlsx; CSV has no formulas."""
+    if os.path.splitext(file_path)[1].lower() == ".csv":
+        return 0
+    try:
+        wb_formulas = openpyxl.load_workbook(file_path, data_only=False)
+        wb_values   = openpyxl.load_workbook(file_path, data_only=True)
+        ws_f, ws_v  = wb_formulas[sheet_name], wb_values[sheet_name]
+        count = sum(
+            1 for row_f, row_v in zip(ws_f.iter_rows(), ws_v.iter_rows())
+            for cf, cv in zip(row_f, row_v)
+            if isinstance(cf.value, str) and cf.value.startswith("=") and cv.value is None
+        )
+        wb_formulas.close(); wb_values.close()
+        return count
+    except Exception:
+        return 0
+
 
 # ── Main entry point ──────────────────────────────────────────────────────────
 
-def extract_from_excel(file_path: str, sheet_name: str) -> tuple[list, str, dict, float]:  # ← return type gains float
+def extract_from_excel(
+    file_path: str,
+    sheet_name: str,
+) -> tuple[list, str, dict, float]:
     ext = os.path.splitext(file_path)[1].lower()
     if ext == ".csv":
         with open(file_path, "r", encoding="utf-8-sig") as f:
             rows = list(csv.reader(f))
         if not rows:
             return [], "UNKNOWN", {}, 0.0
-        sheet_type, sheet_confidence = classify_sheet(rows)          # ← was: classify_sheet(rows) passed inline
+        if len(rows) > MAX_EXCEL_ROWS:                                          # NEW
+            raise ValueError(                                                    # NEW
+                f"This CSV has {len(rows):,} rows, exceeding the "               # NEW
+                f"{MAX_EXCEL_ROWS:,}-row processing limit. Split the file "      # NEW
+                f"into smaller batches and re-upload."                           # NEW
+            )                                                                    # NEW
+        sheet_type, sheet_confidence = classify_sheet(rows)
         claims, sheet_type = parse_rows(sheet_type, rows)
-        return claims, sheet_type, {}, sheet_confidence               # ← confidence added
+        return claims, sheet_type, {}, sheet_confidence
     else:
-        wb        = openpyxl.load_workbook(file_path, data_only=True)
+        try:                                                                     # NEW
+            wb = openpyxl.load_workbook(file_path, data_only=True)               # CHANGED (was un-wrapped)
+        except Exception as e:                                                   # NEW
+            raise ValueError(                                                    # NEW
+                f"Could not open this Excel file — it may be password-"          # NEW
+                f"protected, corrupted, or in an unsupported format "            # NEW
+                f"({type(e).__name__}: {e})."                                    # NEW
+            ) from e                                                             # NEW
         ws        = wb[sheet_name]
         raw_rows  = [[cell.value for cell in row] for row in ws.iter_rows()]
         cell_rows = [list(row) for row in ws.iter_rows()]
         wb.close()
         if not raw_rows:
             return [], "UNKNOWN", {}, 0.0
-        sheet_type, sheet_confidence = classify_sheet(raw_rows)       # ← was: sheet_type = classify_sheet(raw_rows)
+        if len(raw_rows) > MAX_EXCEL_ROWS:                                       # NEW
+            raise ValueError(                                                    # NEW
+                f"Sheet '{sheet_name}' has {len(raw_rows):,} rows, exceeding "   # NEW
+                f"the {MAX_EXCEL_ROWS:,}-row processing limit. Split the "       # NEW
+                f"file and re-upload."                                           # NEW
+            )                                                                    # NEW
+        sheet_type, sheet_confidence = classify_sheet(raw_rows)
         hri        = _find_header_row(raw_rows)
         title_kvs  = extract_sheet_title_kvs(raw_rows, cell_rows, hri, sheet_name)
         claims, sheet_type = parse_rows_with_cells(sheet_type, raw_rows, cell_rows)
-        return claims, sheet_type, title_kvs, sheet_confidence        # ← confidence added
+        return claims, sheet_type, title_kvs, sheet_confidence
 
 
 # ── Row parsers ───────────────────────────────────────────────────────────────
