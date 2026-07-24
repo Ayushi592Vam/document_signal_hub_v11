@@ -1592,71 +1592,6 @@ def analyse_document(
             + "\n}"
         )
 
-    # # ── Call A: entities + signals ────────────────────────────────────────────
-    # user_a = (
-    #     f"Document type: {doc_type}"
-    #     + (f" / Sub-type: {subtype}" if subtype else "")
-    #     + f"\nExtract entities and detect signals."
-    #     + adi_listing
-    #     + f"\n\n--- DOCUMENT TEXT ---\n{text_a}"
-    # )
-    # result_a = _llm_call(
-    #     system_prompt=_entities_system(doc_type, subtype),
-    #     user_prompt=user_a,
-    #     max_tokens=2500,
-    #     label="entities_signals",
-    #     use_enhanced=False,
-    # )
-
-    # # Retry with reduced input if Call A failed
-    # if result_a is None:
-    #     _debug_store("entities_signals_retry_triggered", "Call A returned None")
-    #     result_a = _llm_call(
-    #         system_prompt=_entities_system(doc_type, subtype),
-    #         user_prompt=user_a[:int(len(user_a) * 0.6)],
-    #         max_tokens=2500,
-    #         label="entities_signals_retry",
-    #         use_enhanced=False,
-    #     )
-
-    # # ── Call B: summary + type_specific + judge ───────────────────────────────
-    # user_b = (
-    #     f"Document type: {doc_type}"
-    #     + (f" / Sub-type: {subtype}" if subtype else "")
-    #     + f"\nGenerate a summary and assessment."
-    #     + adi_listing
-    #     + f"\n\n--- DOCUMENT TEXT ---\n{text_b}"
-    # )
-    # result_b = _llm_call(
-    #     system_prompt=_summary_system(doc_type),
-    #     user_prompt=user_b,
-    #     max_tokens=1200,
-    #     label="summary_judge",
-    #     use_enhanced=False,
-    # )
-
-    # # ── Merge ──────────────────────────────────────────────────────────────────
-    # entities      = {}
-    # signals       = []
-    # summary       = ""
-    # type_specific = {}
-    # judge         = {}
-
-    # if result_a:
-    #     entities = result_a.get("entities") or {}
-    #     signals  = result_a.get("signals")  or []
-    #     # ── LAYER 4: Verify extracted values exist in source text ─────────
-    #     entities = _verify_entities_against_text(entities, full_text)
-    #     for _, ed in entities.items():
-    #         if isinstance(ed, dict):
-    #             ed.setdefault("azure_di_key", None)
-
-    # if result_b:
-    #     summary       = result_b.get("summary")       or ""
-    #     type_specific = result_b.get("type_specific") or {}
-    #     judge         = result_b.get("judge")         or {}
-
-
     # ── CALL A — Entities only (gpt-4o-mini) ─────────────────────────────────
     user_a = (
         f"Document type: {doc_type}"
@@ -1665,24 +1600,14 @@ def analyse_document(
         + adi_listing
         + f"\n\n--- DOCUMENT TEXT ---\n{text_a}"
     )
-    result_a = _llm_call(
+    result_a = _llm_call_with_retry(
         system_prompt=_entities_system(doc_type, subtype),
         user_prompt=user_a,
         max_tokens=2000,
         label="entities",
-        use_enhanced=False,   # gpt-4o-mini
+        use_enhanced=False,
+        shrink_on_retry=True,   # entities' actual failure mode is truncation
     )
-
-    # Retry with reduced input if Call A failed
-    if result_a is None:
-        _debug_store("entities_retry_triggered", "Call A returned None")
-        result_a = _llm_call(
-            system_prompt=_entities_system(doc_type, subtype),
-            user_prompt=user_a[:int(len(user_a) * 0.6)],
-            max_tokens=2000,
-            label="entities_retry",
-            use_enhanced=False,
-        )
 
     # ── CALL B — Signals only (gpt-4o-mini, YAML-driven) ─────────────────────
     user_b_signals = (
@@ -1693,14 +1618,14 @@ def analyse_document(
         + "medical complexity, and coverage issues."
         + f"\\n\\n--- DOCUMENT TEXT ---\\n{full_text[:10000]}"
     )
-    result_b = with_retry(lambda: _llm_call(
+    result_b = _llm_call_with_retry(
         system_prompt=_signals_system(doc_type),
         user_prompt=user_b_signals,
         max_tokens=3500,
         label="signals",
         use_enhanced=False,
-    ), max_attempts=2)
-
+        shrink_on_retry=False,
+    )
 
     # ── CALL C — Summary + type_specific + judge (gpt-4o-mini) ───────────────
     user_c = (
@@ -1710,14 +1635,15 @@ def analyse_document(
         + adi_listing
         + f"\n\n--- DOCUMENT TEXT ---\n{text_a}"
     )
-    result_c = _llm_call(
+    result_c = _llm_call_with_retry(
         system_prompt=_summary_system(doc_type),
         user_prompt=user_c,
         max_tokens=1200,
         label="summary_judge",
-        use_enhanced=False,   # gpt-4o-mini
+        use_enhanced=False,
+        shrink_on_retry=False,   # NEW — Call C previously had zero retry at all
     )
-
+  
     # ── Merge all three results ───────────────────────────────────────────────
     entities      = {}
     signals       = []
