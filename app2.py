@@ -30,7 +30,7 @@ from modules.file_utils import (
     get_sheet_names, get_sheet_dimensions,
     extract_merged_cell_metadata, extract_totals_row,
 )
-from modules.parsing import extract_from_excel, parse_txt_file
+from modules.parsing import extract_from_excel, parse_txt_file, _warn_uncalculated_formulas
 from modules.normalization import (
     auto_normalize_on_schema_activate,
     normalize_str,
