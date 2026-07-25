@@ -465,20 +465,18 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
     st.session_state["current_file_hash"] = file_hash
     st.session_state["sheet_hashes"]      = sheet_hashes
 
-    hash_store = _load_hash_store()
-    if file_hash in hash_store:
+    _existing_entry = _get_hash_entry(file_hash)                          # CHANGED
+    if _existing_entry:                                                    # CHANGED
         st.session_state["is_duplicate_file"]    = True
-        st.session_state["duplicate_first_seen"] = hash_store[file_hash]["first_seen"]
-        st.session_state["duplicate_orig_name"]  = hash_store[file_hash]["filename"]
+        st.session_state["duplicate_first_seen"] = _existing_entry["first_seen"]   # CHANGED
+        st.session_state["duplicate_orig_name"]  = _existing_entry["filename"]     # CHANGED
     else:
         st.session_state["is_duplicate_file"]    = False
         st.session_state["duplicate_first_seen"] = None
-        hash_store[file_hash] = {
-            "filename":     uploaded.name,
-            "first_seen":   datetime.datetime.now().isoformat(),
-            "sheet_hashes": sheet_hashes,
-        }
-        _save_hash_store(hash_store)
+        _save_hash_entry(                                                  # CHANGED — was hash_store[file_hash]=... + _save_hash_store(hash_store)
+            file_hash, uploaded.name,
+            datetime.datetime.now().isoformat(), sheet_hashes,
+        )
         _append_audit({
             "event":     "FILE_INGESTED",
             "timestamp": datetime.datetime.now().isoformat(),
@@ -493,6 +491,7 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
             tags=[f"ext:{file_ext.lstrip('.')}"],
         )
 
+    hash_store = _load_hash_store()   # NEW — full-table read, still needed for the loop below
     _sheet_hash_index = {}
     for _fh, _fdata in hash_store.items():
         if _fh == file_hash or not isinstance(_fdata, dict):
@@ -507,6 +506,7 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
     st.session_state["sheet_dup_info"] = {
         sn: _sheet_hash_index.get(sh) for sn, sh in sheet_hashes.items()
     }
+    
 else:
     file_hash    = st.session_state.get("current_file_hash", "")
     sheet_hashes = st.session_state.get("sheet_hashes", {})
