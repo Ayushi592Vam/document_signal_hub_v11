@@ -1,46 +1,73 @@
 """
 modules/storage.py
-Feature store (parsed JSON cache), hash store, and SHA-256 helpers.
+Feature store (parsed JSON cache, still on the Volume) and hash store
+(now Delta, keyed by file_hash) SHA-256 helpers.
 
-UPDATE 1: _compute_sheet_sha256 hashes a *sorted, stripped* list of
-non-empty cell values instead of raw cells in positional order, for
-Excel sheets -- makes the hash robust to cosmetic edits (extra
-whitespace, a shifted row/column) that don't change the actual data.
-
-UPDATE 2: .html/.htm added to the whole-file-hash group (alongside csv/
-pdf/docx) -- previously HTML files fell through to the openpyxl
-workbook-loading branch and would crash immediately on upload.
-
-TRADEOFF (Update 1): sorting discards positional information. Two
-sheets with the identical *set* of values arranged differently would
-now hash the same. For claims data this is an extremely unlikely
-false-positive, but it is a real tradeoff worth knowing about.
+MIGRATION NOTE: hash_store moved from a single JSON blob to a Delta
+table, upserted by file_hash via modules.delta_io.upsert_row(). A new
+upload now only writes its OWN row instead of loading the entire store,
+mutating one key, and saving the whole thing back -- the point of using
+a real database instead of a flat file. _load_hash_store() (full-table
+read) is kept ONLY for app2.py's cross-file sheet-duplicate index, which
+genuinely needs every file's sheet_hashes; a single file's own lookup
+should use _get_hash_entry() instead.
 """
 
 import datetime
 import hashlib
+import json
 import os
 
 import openpyxl
 
-from config.settings import FEATURE_STORE_PATH, HASH_STORE_PATH
+from config.settings import FEATURE_STORE_PATH
 from modules.normalization import normalize_str
 from modules.volume_io import load_json, save_json
+from modules.delta_io import read_rows, upsert_row, get_row
 
+_HASH_STORE_TABLE = "documentsignalhub.feature_store.hash_store"
 
-# ── Hash store (Files API-backed) ─────────────────────────────────────────────
 
 def _load_hash_store() -> dict:
-    return load_json(HASH_STORE_PATH, default={})
+    """Full-table read. Use only where every file's record is needed
+    (the cross-file sheet-duplicate scan) -- for a single file, use
+    _get_hash_entry() instead."""
+    rows = read_rows(_HASH_STORE_TABLE)
+    return {
+        r["file_hash"]: {
+            "filename":     r["filename"],
+            "first_seen":   str(r["first_seen"]),
+            "sheet_hashes": json.loads(r["sheet_hashes"] or "{}"),
+        }
+        for r in rows
+    }
 
 
-def _save_hash_store(store: dict) -> None:
-    save_json(HASH_STORE_PATH, store)
+def _get_hash_entry(file_hash: str) -> dict | None:
+    """Single-key lookup -- one indexed row read, not a full-table scan."""
+    r = get_row(_HASH_STORE_TABLE, "file_hash", file_hash)
+    if not r:
+        return None
+    return {
+        "filename":     r["filename"],
+        "first_seen":   str(r["first_seen"]),
+        "sheet_hashes": json.loads(r["sheet_hashes"] or "{}"),
+    }
 
+
+def _save_hash_entry(file_hash: str, filename: str, first_seen: str, sheet_hashes: dict) -> None:
+    """Upserts ONE file's hash record."""
+    upsert_row(_HASH_STORE_TABLE, "file_hash", {
+        "file_hash":    file_hash,
+        "filename":     filename,
+        "first_seen":   first_seen,
+        "sheet_hashes": json.dumps(sheet_hashes),
+    })
+
+
+# ── Feature store (unchanged — still Volume/JSON-backed) ─────────────────────
 
 def _compute_file_sha256(path: str) -> str:
-    """Fast exact-bytes check -- still useful for catching a literal
-    re-upload of the identical file."""
     h = hashlib.sha256()
     with open(path, "rb") as f:
         for chunk in iter(lambda: f.read(65_536), b""):
@@ -49,16 +76,7 @@ def _compute_file_sha256(path: str) -> str:
 
 
 def _compute_sheet_sha256(file_path: str, sheet_name: str) -> str:
-    """
-    For Excel sheets: hashes a sorted, whitespace-stripped list of
-    non-empty cell values, NOT raw cells in row/column order -- this is
-    what makes the hash survive cosmetic edits.
-
-    For CSV/PDF/DOCX/HTML: whole-file byte hash, since these don't have
-    the "same content, different cell layout" problem spreadsheets do.
-    """
     ext = os.path.splitext(file_path)[1].lower()
-
     if ext in (".csv", ".pdf", ".docx", ".html", ".htm"):
         h = hashlib.sha256()
         h.update(sheet_name.encode("utf-8"))
@@ -66,10 +84,8 @@ def _compute_sheet_sha256(file_path: str, sheet_name: str) -> str:
             for chunk in iter(lambda: f.read(65_536), b""):
                 h.update(chunk)
         return h.hexdigest()
-
     wb = openpyxl.load_workbook(file_path, read_only=True, data_only=True)
     ws = wb[sheet_name]
-
     values: list[str] = []
     for row in ws.iter_rows(values_only=True):
         for raw_cell in row:
@@ -79,17 +95,13 @@ def _compute_sheet_sha256(file_path: str, sheet_name: str) -> str:
             if v:
                 values.append(v)
     wb.close()
-
     values.sort()
-
     h = hashlib.sha256()
     for v in values:
         h.update(v.encode("utf-8"))
-        h.update(b"\x00")  # separator so "ab"+"c" can't collide with "a"+"bc"
+        h.update(b"\x00")
     return h.hexdigest()
 
-
-# ── Feature store (unchanged -- file-based via Files API) ────────────────────
 
 def _load_from_feature_store(sheet_hash: str) -> dict | None:
     if not sheet_hash:
@@ -121,14 +133,9 @@ def _save_to_feature_store(sheet_hash: str, sheet_name: str, data: dict) -> str:
         return obj
 
     save_json(path, _san(data))
-
     index_path = f"{FEATURE_STORE_PATH}/index.json"
     index = load_json(index_path, default={})
-    index[sheet_hash] = {
-        "path":       path,
-        "sheet_name": sheet_name,
-        "saved_at":   datetime.datetime.now().isoformat(),
-    }
+    index[sheet_hash] = {"path": path, "sheet_name": sheet_name, "saved_at": datetime.datetime.now().isoformat()}
     save_json(index_path, index)
     return path
 
