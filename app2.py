@@ -297,21 +297,6 @@ for _k, _v in SESSION_DEFAULTS.items():
 if "_session_start" not in st.session_state:
     st.session_state["_session_start"] = datetime.datetime.utcnow().isoformat()
 
-if "claim_dup_migrated_v2" not in st.session_state:
-    try:
-        from modules.claim_dup_store import _load_claim_dup_store, _save_claim_dup_store
-        _dup_store = _load_claim_dup_store()
-        _cleaned   = {
-            cid: snap for cid, snap in _dup_store.items()
-            if snap.get("fields") and
-            sum(1 for v in snap["fields"].values() if str(v).strip()) /
-            max(len(snap["fields"]), 1) >= 0.3
-        }
-        if len(_cleaned) != len(_dup_store):
-            _save_claim_dup_store(_cleaned)
-    except Exception:
-        pass
-    st.session_state["claim_dup_migrated_v2"] = True
 
 if "focus_field" not in st.session_state:
     st.session_state.focus_field = None
