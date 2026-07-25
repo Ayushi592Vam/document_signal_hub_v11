@@ -175,8 +175,10 @@ def run_with_lineage(event_name: str, filename: str, fn, *args, **kwargs):
     start_perf = time.perf_counter()
     error = None
 
-    frame = {"category_totals": defaultdict(float)}
+    
     stack = _frame_stack()
+    is_outermost = (len(stack) == 0) 
+    frame = {"category_totals": defaultdict(float)}
     stack.append(frame)
 
     try:
@@ -211,7 +213,9 @@ def run_with_lineage(event_name: str, filename: str, fn, *args, **kwargs):
             "status":           "error" if error else "success",
             **({"error": error} if error else {}),
         })
-
+        if is_outermost:                  # NEW
+            _flush_cost_buffers()          # NEW
+        
 
 def with_retry(
     fn,
