@@ -16,11 +16,11 @@ env:
   - name: 'DATABRICKS_WAREHOUSE_ID'
     valueFrom: sql-warehouse  
 
-  # # NEW — embedding resource secrets
-  # - name: 'OPENAI_EMBEDDING_ENDPOINT'
-  #   valueFrom: openai-embedding-endpoint
-  # - name: 'OPENAI_EMBEDDING_API_KEY'
-  #   valueFrom: openai-embedding-api-key  
+  # NEW — embedding resource secrets
+  - name: 'OPENAI_EMBEDDING_ENDPOINT'
+    valueFrom: openai-embedding-endpoint
+  - name: 'OPENAI_EMBEDDING_API_KEY'
+    valueFrom: openai-embedding-api-key  
 
   # ── Plain, non-sensitive config (safe to hardcode) ──
   - name: 'OPENAI_API_VERSION'
@@ -36,9 +36,9 @@ env:
   - name: 'PDF_INTEL_DEBUG'
     value: '1'
 
-  # # NEW — not secret, just a name
-  # - name: 'OPENAI_EMBEDDING_DEPLOYMENT'
-  #   value: 'text-embedding-3-small'
-  # - name: 'OPENAI_EMBEDDING_MODEL'
-  #   value: 'text-embedding-3-small'  
+  # NEW — not secret, just a name
+  - name: 'OPENAI_EMBEDDING_DEPLOYMENT'
+    value: 'text-embedding-3-small'
+  - name: 'OPENAI_EMBEDDING_MODEL'
+    value: 'text-embedding-3-small'  
     
