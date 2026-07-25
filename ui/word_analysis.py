@@ -2393,6 +2393,19 @@ def render_word_analysis_panel(
     meta      = _DOC_TYPE_META.get(doc_label, _DOC_TYPE_META["General Document"])
     raw_text  = word_result.get("raw_text", "")
 
+    # ── Low-confidence classification warning ─────────────────────────────
+    # Mirrors the manual_review-style banner already shown for Excel/CSV
+    # (ui.sheet_card.render_sheet_card) and PDF/TXT/HTML
+    # (needs_manual_review in ui.pdf_analysis) -- Word classification now
+    # gets the same treatment instead of silently trusting a weak signal.
+    if doc_conf < 0.65:
+        st.warning(
+            f"⚠ **This document's classification confidence is only "
+            f"{doc_conf:.0%}.** The keyword signals used to identify it as "
+            f"a **{doc_label}** were weak or ambiguous — worth a quick "
+            f"manual check before relying on the extracted fields."
+        )
+
     # ── Augment fields: direct docx + LLM extraction ─────────────────────────
     existing_fields: list[dict] = list(word_result.get("fields", []))
     direct_fields:   list[dict] = []
