@@ -56,6 +56,44 @@ def _frame_stack() -> list:
     return _lineage_ctx.stack
 
 
+_cost_buffer = threading.local()
+
+
+def _get_cost_buffer():
+    if not hasattr(_cost_buffer, "llm"):
+        _cost_buffer.llm = []
+        _cost_buffer.adi = []
+    return _cost_buffer
+
+
+def record_llm_cost(entry: dict) -> None:
+    """Buffers one LLM cost entry instead of writing immediately.
+    Flushed as a single batch write when the OUTERMOST run_with_lineage()
+    call for this document finishes."""
+    _get_cost_buffer().llm.append(entry)
+
+
+def record_adi_cost(entry: dict) -> None:
+    _get_cost_buffer().adi.append(entry)
+
+
+def _flush_cost_buffers() -> None:
+    from modules.delta_io import append_rows
+    buf = _get_cost_buffer()
+    if buf.llm:
+        try:
+            append_rows("documentsignalhub.feature_store.llm_cost_log", buf.llm)
+        except Exception:
+            pass
+        buf.llm.clear()
+    if buf.adi:
+        try:
+            append_rows("documentsignalhub.feature_store.adi_cost_log", buf.adi)
+        except Exception:
+            pass
+        buf.adi.clear()
+
+
 @contextmanager
 def track_cost(category: str):
     """
