@@ -13,6 +13,8 @@ env:
     valueFrom: azure-di-endpoint
   - name: 'AZURE_DI_KEY'
     valueFrom: azure-di-key
+  - name: 'DATABRICKS_WAREHOUSE_ID'
+    valueFrom: sql-warehouse  
 
   # NEW — embedding resource secrets
   - name: 'OPENAI_EMBEDDING_ENDPOINT'
