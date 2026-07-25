@@ -1,26 +1,26 @@
 """
 modules/cache_manager.py
-Centralised cache-clearing utilities for the TPA Loss Run Parser.
-Handles all 4 cache layers:
-  1. Streamlit session state (UI state, selections, modified values)
-  2. Feature store — parsed JSON cache (claims_json/)
-  3. Hash store     — file duplicate memory (hash_store.json)
-  4. Claim dup store — cross-upload claim change tracking (claim_dup_store.json)
+Centralised cache-clearing utilities.
 
-MIGRATION NOTE: all Volume access now goes through modules/volume_io.py
-(Files API) instead of plain open()/os calls.
+Layer status after tonight's migration:
+  1. Streamlit session state       — unchanged, in-memory
+  2. Feature store (parsed sheets) — unchanged, Volume/JSON (Files API)
+  3. Hash store                    — Delta (documentsignalhub.feature_store.hash_store)
+  4. Claim dup store                — Delta (documentsignalhub.feature_store.claim_dup_store)
+  5. Audit log                      — Delta (documentsignalhub.feature_store.audit_log)
+  6. LLM / ADI cost logs             — Delta
+  7. JSON export table               — still Volume/JSON, not migrated
 """
 
-from config.settings import (
-    FEATURE_STORE_PATH,
-    HASH_STORE_PATH,
-    CLAIM_DUP_STORE_PATH,
-    AUDIT_LOG_PATH,
-    JSON_EXPORT_TABLE_PATH,
-    LLM_COST_LOG_PATH,
-    ADI_COST_LOG_PATH,
-)
+from config.settings import FEATURE_STORE_PATH, JSON_EXPORT_TABLE_PATH
 from modules.volume_io import load_json, save_json, _get_client
+from modules.delta_io import count_rows, delete_all_rows
+
+_HASH_STORE_TABLE   = "documentsignalhub.feature_store.hash_store"
+_CLAIM_DUP_TABLE    = "documentsignalhub.feature_store.claim_dup_store"
+_AUDIT_LOG_TABLE    = "documentsignalhub.feature_store.audit_log"
+_LLM_COST_TABLE     = "documentsignalhub.feature_store.llm_cost_log"
+_ADI_COST_TABLE     = "documentsignalhub.feature_store.adi_cost_log"
 
 
 # ── Individual clear functions ────────────────────────────────────────────────
@@ -33,7 +33,6 @@ def clear_session_cache(session_state) -> int:
         "selected_idx", "focus_field",
         "current_file_hash", "sheet_hashes", "sheet_dup_info",
         "is_duplicate_file", "duplicate_first_seen", "duplicate_orig_name",
-        "claim_dup_migrated_v2",
     }
     keys_to_del = [
         k for k in list(session_state.keys())
@@ -47,17 +46,10 @@ def clear_session_cache(session_state) -> int:
 
 
 def clear_parsed_cache() -> tuple[int, int]:
-    """
-    Deletes cached parsed JSON files (feature_store/*.json) via the Files
-    API. Returns (files_deleted, bytes_freed) -- bytes_freed is always 0
-    now since the Files API list endpoint doesn't return size cheaply;
-    only the count is meaningful.
-    """
     try:
         entries = list(_get_client().files.list_directory_contents(FEATURE_STORE_PATH))
     except Exception:
         return 0, 0
-
     deleted = 0
     for entry in entries:
         if entry.path.endswith(".json"):
@@ -70,24 +62,30 @@ def clear_parsed_cache() -> tuple[int, int]:
 
 
 def clear_hash_store() -> int:
-    data = load_json(HASH_STORE_PATH, default={})
-    count = len(data)
-    save_json(HASH_STORE_PATH, {})
-    return count
+    try:
+        count = count_rows(_HASH_STORE_TABLE)
+        delete_all_rows(_HASH_STORE_TABLE)
+        return count
+    except Exception:
+        return 0
 
 
 def clear_claim_dup_store() -> int:
-    data = load_json(CLAIM_DUP_STORE_PATH, default={})
-    count = len(data)
-    save_json(CLAIM_DUP_STORE_PATH, {})
-    return count
+    try:
+        count = count_rows(_CLAIM_DUP_TABLE)
+        delete_all_rows(_CLAIM_DUP_TABLE)
+        return count
+    except Exception:
+        return 0
 
 
 def clear_audit_log() -> int:
-    data = load_json(AUDIT_LOG_PATH, default=[])
-    count = len(data)
-    save_json(AUDIT_LOG_PATH, [])
-    return count
+    try:
+        count = count_rows(_AUDIT_LOG_TABLE)
+        delete_all_rows(_AUDIT_LOG_TABLE)
+        return count
+    except Exception:
+        return 0
 
 
 def clear_export_table() -> int:
@@ -96,18 +94,24 @@ def clear_export_table() -> int:
     save_json(JSON_EXPORT_TABLE_PATH, [])
     return count
 
+
 def clear_llm_cost_log() -> int:
-    data = load_json(LLM_COST_LOG_PATH, default=[])
-    count = len(data)
-    save_json(LLM_COST_LOG_PATH, [])
-    return count
+    try:
+        count = count_rows(_LLM_COST_TABLE)
+        delete_all_rows(_LLM_COST_TABLE)
+        return count
+    except Exception:
+        return 0
 
 
 def clear_adi_cost_log() -> int:
-    data = load_json(ADI_COST_LOG_PATH, default=[])
-    count = len(data)
-    save_json(ADI_COST_LOG_PATH, [])
-    return count
+    try:
+        count = count_rows(_ADI_COST_TABLE)
+        delete_all_rows(_ADI_COST_TABLE)
+        return count
+    except Exception:
+        return 0
+
 
 # ── Stats helpers ─────────────────────────────────────────────────────────────
 
@@ -121,12 +125,19 @@ def get_cache_stats() -> dict:
     except Exception:
         stats["parsed"] = {"files": 0, "size_kb": 0.0}
 
-    stats["hash_store"] = {"entries": len(load_json(HASH_STORE_PATH, default={}))}
-    stats["claim_dups"] = {"entries": len(load_json(CLAIM_DUP_STORE_PATH, default={}))}
-    stats["audit_log"] = {"entries": len(load_json(AUDIT_LOG_PATH, default=[]))}
+    for key, table in [
+        ("hash_store",   _HASH_STORE_TABLE),
+        ("claim_dups",   _CLAIM_DUP_TABLE),
+        ("audit_log",    _AUDIT_LOG_TABLE),
+        ("llm_cost_log", _LLM_COST_TABLE),
+        ("adi_cost_log", _ADI_COST_TABLE),
+    ]:
+        try:
+            stats[key] = {"entries": count_rows(table)}
+        except Exception:
+            stats[key] = {"entries": 0}
+
     stats["export_table"] = {"entries": len(load_json(JSON_EXPORT_TABLE_PATH, default=[]))}
-    stats["llm_cost_log"] = {"entries": len(load_json(LLM_COST_LOG_PATH, default=[]))}
-    stats["adi_cost_log"] = {"entries": len(load_json(ADI_COST_LOG_PATH, default=[]))}
 
     return stats
 
