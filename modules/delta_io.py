@@ -94,3 +94,56 @@ def count_rows(table: str, where: str = "") -> int:
             return cur.fetchone()[0]
     finally:
         conn.close()
+
+def upsert_row(table: str, key_col: str, row: dict) -> None:
+    """
+    Upsert a single row by key_col using Delta MERGE INTO. Used for
+    KEYED stores (hash_store keyed by file_hash, claim_dup_store keyed
+    by dup_key) where the record for a given key must be REPLACED, not
+    appended -- unlike audit_log/cost logs, which are pure append-only
+    and never need this.
+    """
+    cols = list(row.keys())
+    set_clause   = ", ".join(f"t.{c} = s.{c}" for c in cols if c != key_col)
+    insert_cols  = ", ".join(cols)
+    insert_vals  = ", ".join(f"s.{c}" for c in cols)
+    select_cols  = ", ".join(f"%({c})s AS {c}" for c in cols)
+
+    query = f"""
+        MERGE INTO {table} AS t
+        USING (SELECT {select_cols}) AS s
+        ON t.{key_col} = s.{key_col}
+        WHEN MATCHED THEN UPDATE SET {set_clause}
+        WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})
+    """
+    conn = _get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(query, row)
+    finally:
+        conn.close()
+
+
+def get_row(table: str, key_col: str, key_val: str) -> dict | None:
+    """Single-key point lookup -- one indexed row read, not a full-table
+    scan. Prefer this over read_rows() whenever you only need one key."""
+    conn = _get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"SELECT * FROM {table} WHERE {key_col} = %({key_col})s", {key_col: key_val})
+            cols = [d[0] for d in cur.description]
+            row = cur.fetchone()
+            return dict(zip(cols, row)) if row else None
+    finally:
+        conn.close()
+
+
+def delete_all_rows(table: str) -> None:
+    """Full-table delete -- used by the cache-clear buttons. Creates a
+    new Delta table version rather than mutating rows in place."""
+    conn = _get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(f"DELETE FROM {table}")
+    finally:
+        conn.close()
