@@ -22,7 +22,7 @@ from config.settings import SESSION_DEFAULTS
 from config.schemas import SCHEMAS, _CONFIG_LOAD_STATUS
 from modules.audit import _append_audit
 from modules.storage import (
-    _load_hash_store, _save_hash_store,
+    _load_hash_store, _get_hash_entry, _save_hash_entry,
     _compute_file_sha256, _compute_sheet_sha256,
     _load_from_feature_store, _save_to_feature_store,
 )
