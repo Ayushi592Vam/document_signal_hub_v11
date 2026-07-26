@@ -912,7 +912,7 @@ _llm_map_result = {}
 _llm_map_ran    = False
 _llm_map_count  = 0
 
-if data and file_ext != ".pdf":
+if data and file_ext != ".pdf" and sheet_type != "CHECK_REGISTER":
     _sample_keys = list(data[0].keys())
     _ref_schema  = (
         _active_schema_now
@@ -921,41 +921,43 @@ if data and file_ext != ".pdf":
     )
     _needs_llm_map = _has_unknown_fields(_sample_keys, _ref_schema)
     if _needs_llm_map:
-        
-        from modules.semantic_mapping import semantic_match_field
-        from modules.normalization import _best_standard_name
-        # Only run the (paid) semantic layer on columns the free rule-based
-        # matcher genuinely couldn't resolve -- not on every column in the sheet
-        _unmapped_cols = [c for c in _sample_keys if not _best_standard_name(c)]
+        try:
+            from modules.semantic_mapping import semantic_match_field
+            from modules.normalization import _best_standard_name
+            _unmapped_cols = [c for c in _sample_keys if not _best_standard_name(c)]
 
-        candidate_fields = SCHEMAS[_ref_schema]["accepted_fields"]
-        _semantic_mapped = {}
-        _still_unmapped = []
-        for col in _unmapped_cols:
-            matched_field, score = semantic_match_field(col, candidate_fields)
-            if matched_field:
-                _semantic_mapped[col] = matched_field
+            candidate_fields = SCHEMAS[_ref_schema]["accepted_fields"]
+            _semantic_mapped = {}
+            _still_unmapped = []
+            for col in _unmapped_cols:
+                matched_field, score = semantic_match_field(col, candidate_fields)
+                if matched_field:
+                    _semantic_mapped[col] = matched_field
+                else:
+                    _still_unmapped.append(col)
+
+            if _still_unmapped:
+                _llm_map_result = llm_map_unknown_fields(data[:5], _ref_schema, selected_sheet)
+                _llm_map_result.setdefault("mappings", {}).update(_semantic_mapped)
             else:
-                _still_unmapped.append(col)
+                _llm_map_result = {"mappings": _semantic_mapped}
+            _llm_map_count = len(_llm_map_result.get("mappings", {}))
+            _llm_map_ran   = _llm_map_count > 0
 
-        if _still_unmapped:
-            _llm_map_result = llm_map_unknown_fields(data[:5], _ref_schema, selected_sheet)
-            _llm_map_result.setdefault("mappings", {}).update(_semantic_mapped)
-        else:
-            _llm_map_result = {"mappings": _semantic_mapped}
-        _llm_map_count = len(_llm_map_result.get("mappings", {}))
-        _llm_map_ran   = _llm_map_count > 0
-        
-        if _llm_map_ran:
-            active["_llm_field_map"] = _llm_map_result
-            _llm_mappings    = _llm_map_result.get("mappings", {})
-            _already_renamed = active.get("_llm_renamed", False)
-            if _llm_mappings and not _already_renamed:
-                active["data"], _extra_renames = rename_columns_to_standard(
-                    active["data"], llm_map=_llm_map_result
-                )
-                data = active["data"]
-                active["_llm_renamed"] = True
+            if _llm_map_ran:
+                active["_llm_field_map"] = _llm_map_result
+                _llm_mappings    = _llm_map_result.get("mappings", {})
+                _already_renamed = active.get("_llm_renamed", False)
+                if _llm_mappings and not _already_renamed:
+                    active["data"], _extra_renames = rename_columns_to_standard(
+                        active["data"], llm_map=_llm_map_result
+                    )
+                    data = active["data"]
+                    active["_llm_renamed"] = True
+        except Exception as _e:
+            from modules.audit import _log_error
+            _log_error("SEMANTIC_FIELD_MAP", uploaded.name, _e)
+            st.warning(f"⚠ Semantic field mapping skipped due to an error: {_e}")
     else:
         active.pop("_llm_field_map", None)
 
