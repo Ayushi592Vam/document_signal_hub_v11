@@ -292,7 +292,11 @@ def render_field_row(
                 key=f"eye_s_{selected_sheet}_{curr_claim_id}_{schema_field}",
                 use_container_width=False,
             ):
-                open_eye_popup(schema_field, info, excel_path, selected_sheet)
+                st.session_state["_eye_popup_request"] = {
+                    "field": schema_field, "info": info,
+                    "excel_path": excel_path, "sheet_name": selected_sheet,
+                }
+                st.rerun()
             st.markdown("</div>", unsafe_allow_html=True)
         with cb:
             st.markdown("<div class='icon-btn-wrap'>", unsafe_allow_html=True)
