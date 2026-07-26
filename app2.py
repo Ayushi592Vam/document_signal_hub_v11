@@ -712,6 +712,8 @@ if selected_sheet not in st.session_state.sheet_cache:
                 sheet_type     = _excel_result[1]
                 _title_kvs_raw = _excel_result[2] if len(_excel_result) > 2 else {}
                 _sheet_confidence = _excel_result[3] if len(_excel_result) > 3 else None
+                st.write("DEBUG sheet_type:", sheet_type)
+                st.write("DEBUG rows returned:", len(data))
 
                 if not data:
                     st.warning(f"No data found in sheet '{selected_sheet}'.")
