@@ -5,7 +5,7 @@ Shows a before/after diff when a claim was seen in a previous upload.
 """
 
 import streamlit as st
-from modules.claim_dup_store import get_claim_dup_result, _load_claim_dup_store, _save_claim_dup_store
+from modules.claim_dup_store import get_claim_dup_result, clear_claim_dup_entry
 
 
 def render_claim_dup_panel(claim_id: str, dup_results: dict, selected_sheet: str) -> None:
@@ -70,10 +70,9 @@ def render_claim_dup_panel(claim_id: str, dup_results: dict, selected_sheet: str
         key=f"clear_dup_{claim_id}",
         help="Remove this claim from the duplicate store so it won't be flagged next time",
     ):
-        store = _load_claim_dup_store()
-        if claim_id in store:
-            del store[claim_id]
-            _save_claim_dup_store(store)
+        # Single-row Delta delete -- no whole-store load/mutate/save needed
+        # now that claim_dup_store is Delta-backed rather than a JSON blob.
+        clear_claim_dup_entry(claim_id)
 
         _dup_key = f"_claim_dup_results_{selected_sheet}"
         if _dup_key in st.session_state:
