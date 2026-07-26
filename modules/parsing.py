@@ -644,7 +644,16 @@ def _find_header_row(rows: list) -> int | None:
             or "injury" in rt or "incident" in rt or "amount" in rt or "reserve" in rt
         ):
             return i
-    for i, row in enumerate(rows[:5]):
+        # ── Check Register headers ──────────────────────────────────────────
+        if (
+            "check number" in rt or "check no" in rt or "check #" in rt
+            or "cheque number" in rt or "cheque no" in rt
+        ) and (
+            "payee" in rt or "date" in rt or "amount" in rt
+            or "balance" in rt or "debit" in rt or "credit" in rt
+        ):
+            return i
+    for i, row in enumerate(rows[:20]):          # widened from rows[:5]
         if sum(1 for c in row if c) >= 3:
             return i
     return None
