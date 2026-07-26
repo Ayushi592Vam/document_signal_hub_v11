@@ -6,9 +6,9 @@ Files API -- just pointed at a SQL warehouse instead of a Volume.
 
 Append-only tables (audit_log, llm_cost_log, adi_cost_log) go through
 append_row()/append_rows(). hash_store and claim_dup_store are keyed
-lookups, not append-only logs -- migrating those needs MERGE/upsert
-logic and is intentionally NOT covered here; they remain on
-modules/volume_io.py (JSON on the Volume) for now.
+lookups, not append-only logs -- these use upsert_row()/get_row()/
+delete_row() for single-key operations, and delete_all_rows() for the
+cache-clear buttons that wipe an entire table.
 """
 
 import os
@@ -134,6 +134,27 @@ def get_row(table: str, key_col: str, key_val: str) -> dict | None:
             cols = [d[0] for d in cur.description]
             row = cur.fetchone()
             return dict(zip(cols, row)) if row else None
+    finally:
+        conn.close()
+
+
+def delete_row(table: str, key_col: str, key_val: str) -> None:
+    """
+    Single-key point delete -- removes exactly one row by key_col,
+    rather than the entire table (see delete_all_rows() below for that).
+
+    Used by per-record "clear this one item" UI actions -- e.g. the
+    claim_dup_panel.py "Clear duplicate history for this claim" button --
+    where wiping the whole claim_dup_store table would be destructive
+    overkill for what the user actually asked for.
+    """
+    conn = _get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                f"DELETE FROM {table} WHERE {key_col} = %({key_col})s",
+                {key_col: key_val},
+            )
     finally:
         conn.close()
 
