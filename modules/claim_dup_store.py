@@ -70,11 +70,18 @@ def _diff_snapshots(old_snap: dict, new_snap: dict) -> dict:
 
 # ── Main check-and-upsert function ────────────────────────────────────────────
 
-def check_and_register_claims(data, sheet_name, filename, detect_claim_id_fn):
+from modules.delta_io import get_rows, upsert_rows, delete_all_rows, delete_row
+
+def check_and_register_claims(
+    data: list,
+    sheet_name: str,
+    filename: str,
+    detect_claim_id_fn,
+) -> dict:
     results = {}
 
-    # 1) Collect all claim IDs first
-    id_map = {}  # claim_id -> claim_data
+    # 1) Resolve claim IDs for every row first, in memory
+    id_map = {}
     for i, claim_data in enumerate(data):
         claim_id = detect_claim_id_fn(claim_data, i)
         if claim_id:
@@ -83,24 +90,56 @@ def check_and_register_claims(data, sheet_name, filename, detect_claim_id_fn):
     if not id_map:
         return results
 
-    # 2) ONE batched read for all existing rows, instead of N get_row calls
-    existing_rows = batch_get_rows(_CLAIM_DUP_TABLE, "dup_key", list(id_map.keys()))
-    existing_by_id = {r["dup_key"]: r for r in existing_rows}
+    # 2) ONE round-trip for all existing rows, instead of N get_row calls
+    existing_by_id = get_rows(_CLAIM_DUP_TABLE, "dup_key", list(id_map.keys()))
 
-    # 3) Build all new snapshots + diff logic in memory (no I/O here)
     upsert_batch = []
     for claim_id, claim_data in id_map.items():
         new_snap = _snapshot_claim(claim_data, claim_id, sheet_name, filename)
         existing = existing_by_id.get(claim_id)
-        # ... same diff logic as before, populate results[claim_id] ...
+
+        if existing:
+            old_snap   = json.loads(existing["record"])
+            old_fields = old_snap.get("fields", {})
+            non_empty  = sum(1 for v in old_fields.values() if str(v).strip())
+            total_flds = len(old_fields)
+
+            if total_flds == 0 or (non_empty / total_flds) < 0.3:
+                results[claim_id] = {"is_duplicate": False}
+            else:
+                changes = _diff_snapshots(old_snap, new_snap)
+                unchanged_count = len(new_snap["fields"]) - len(changes)
+                results[claim_id] = {
+                    "is_duplicate":    True,
+                    "prev_filename":   old_snap.get("filename", "unknown"),
+                    "prev_sheet":      old_snap.get("sheet_name", "unknown"),
+                    "prev_date":       old_snap.get("ingested_at", "")[:19].replace("T", " "),
+                    "changes":         changes,
+                    "unchanged_count": max(0, unchanged_count),
+                    "changed_count":   len(changes),
+                    "old_fields":      old_snap.get("fields", {}),
+                    "new_fields":      new_snap["fields"],
+                }
+                _append_audit({
+                    "event":          "CLAIM_DUPLICATE_DETECTED",
+                    "timestamp":      datetime.datetime.now().isoformat(),
+                    "claim_id":       claim_id,
+                    "sheet":          sheet_name,
+                    "filename":       filename,
+                    "prev_filename":  old_snap.get("filename"),
+                    "changed_fields": list(changes.keys()),
+                })
+        else:
+            results[claim_id] = {"is_duplicate": False}
+
         upsert_batch.append({
-            "dup_key": claim_id,
-            "record": json.dumps(new_snap),
+            "dup_key":      claim_id,
+            "record":       json.dumps(new_snap),
             "last_updated": datetime.datetime.now().isoformat(),
         })
 
-    # 4) ONE batched MERGE for all rows, instead of N upsert_row calls
-    batch_upsert_rows(_CLAIM_DUP_TABLE, "dup_key", upsert_batch)
+    # 3) ONE round-trip to write everything, instead of N upsert_row calls
+    upsert_rows(_CLAIM_DUP_TABLE, "dup_key", upsert_batch)
 
     return results
 
