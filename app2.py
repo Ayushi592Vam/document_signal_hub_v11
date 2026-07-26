@@ -1035,7 +1035,7 @@ else:
         st.stop()
 
     curr_claim = data[st.session_state.selected_idx]
-    st.write("DEBUG curr_claim:", curr_claim)
+   
     
     _frozen_id_key = f"_frozen_claim_id_{selected_sheet}_{st.session_state.selected_idx}"
     if _frozen_id_key not in st.session_state:
