@@ -701,11 +701,13 @@ if selected_sheet not in st.session_state.sheet_cache:
             else:
                 _doc_type_enum = None
                 _sheet_confidence = None
-                try:                                                                          # NEW
+                try:
                     _excel_result = run_with_lineage("FILE_PARSED", uploaded.name, extract_from_excel, excel_path, selected_sheet)
-                except ValueError as _e:                                                       # NEW
-                    st.error(f"⚠ {_e}")                                                        # NEW
-                    st.stop()                                                                  # NEW
+                except Exception as _e:
+                    from modules.audit import _log_error
+                    _log_error("EXCEL_PARSE", uploaded.name, _e)
+                    st.error(f"⚠ Could not parse this Excel file: {_e}")
+                    st.stop()
                 data           = _excel_result[0]
                 sheet_type     = _excel_result[1]
                 _title_kvs_raw = _excel_result[2] if len(_excel_result) > 2 else {}
