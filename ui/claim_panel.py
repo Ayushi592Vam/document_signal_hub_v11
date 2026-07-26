@@ -371,8 +371,14 @@ def _render_plain_mode(
                 )
             with cm: _plain_edit_col()
             with ce:
-                if st.button("👁", key=f"eye_{selected_sheet}_{curr_claim_id}_{field}", use_container_width=True):
-                    show_eye_popup(field, info, excel_path, selected_sheet)
+            if st.button("👁", key=f"eye_{selected_sheet}_{curr_claim_id}_{field}", use_container_width=True):
+                st.session_state["_eye_popup_request"] = {
+                    "field": field,
+                    "info": info,
+                    "excel_path": excel_path,
+                    "sheet_name": selected_sheet,
+                }
+                st.rerun()
             with cb:
                 from ui.field_row import _is_claim_id_field as _is_cid
                 if _is_cid(field):
@@ -408,8 +414,14 @@ def _render_plain_mode(
                 )
             with cm: _plain_edit_col()
             with ce:
-                if st.button("👁", key=f"eye_{selected_sheet}_{curr_claim_id}_{field}", use_container_width=True):
-                    show_eye_popup(field, info, excel_path, selected_sheet)
+            if st.button("👁", key=f"eye_{selected_sheet}_{curr_claim_id}_{field}", use_container_width=True):
+                st.session_state["_eye_popup_request"] = {
+                    "field": field,
+                    "info": info,
+                    "excel_path": excel_path,
+                    "sheet_name": selected_sheet,
+                }
+                st.rerun()
             with cb:
                 if not st.session_state[ek]:
                     if st.button("✏", key=f"ed_{selected_sheet}_{curr_claim_id}_{field}_v{st.session_state.get(f'_v_{mk}',0)}", use_container_width=True):
