@@ -168,3 +168,66 @@ def delete_all_rows(table: str) -> None:
             cur.execute(f"DELETE FROM {table}")
     finally:
         conn.close()
+
+def get_rows(table: str, key_col: str, key_vals: list[str]) -> dict[str, dict]:
+    """
+    Batch point lookup for multiple keys in ONE connection + ONE query,
+    instead of calling get_row() in a loop (which opens a fresh SQL
+    warehouse connection per key -- the dominant cost for small lookups).
+    Returns a dict keyed by key_val for O(1) lookup by the caller.
+    """
+    if not key_vals:
+        return {}
+    placeholders = ", ".join(f"%(k{i})s" for i in range(len(key_vals)))
+    params = {f"k{i}": v for i, v in enumerate(key_vals)}
+    query = f"SELECT * FROM {table} WHERE {key_col} IN ({placeholders})"
+    conn = _get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+            cols = [d[0] for d in cur.description]
+            rows = [dict(zip(cols, row)) for row in cur.fetchall()]
+            return {r[key_col]: r for r in rows}
+    finally:
+        conn.close()
+
+
+def upsert_rows(table: str, key_col: str, rows: list[dict]) -> None:
+    """
+    Batch upsert via a single MERGE INTO ... USING (VALUES ...) AS s,
+    in ONE connection, instead of calling upsert_row() per row. This is
+    the "single bulk MERGE" the claim_dup_store module docstring already
+    flags as the fix once per-row upserts become a latency problem.
+    """
+    if not rows:
+        return
+    cols = list(rows[0].keys())
+    set_clause  = ", ".join(f"t.{c} = s.{c}" for c in cols if c != key_col)
+    insert_cols = ", ".join(cols)
+    insert_vals = ", ".join(f"s.{c}" for c in cols)
+
+    # Build one VALUES row per input row, each with uniquely-named params
+    # so executemany-style collisions can't happen across rows.
+    values_rows = []
+    params = {}
+    for i, row in enumerate(rows):
+        placeholders = ", ".join(f"%(r{i}_{c})s" for c in cols)
+        values_rows.append(f"({placeholders})")
+        for c in cols:
+            params[f"r{i}_{c}"] = row[c]
+    values_clause = ", ".join(values_rows)
+    col_list      = ", ".join(cols)
+
+    query = f"""
+        MERGE INTO {table} AS t
+        USING (SELECT * FROM VALUES {values_clause} AS s({col_list})) AS s
+        ON t.{key_col} = s.{key_col}
+        WHEN MATCHED THEN UPDATE SET {set_clause}
+        WHEN NOT MATCHED THEN INSERT ({insert_cols}) VALUES ({insert_vals})
+    """
+    conn = _get_connection()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(query, params)
+    finally:
+        conn.close()
