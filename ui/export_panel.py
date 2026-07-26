@@ -327,6 +327,7 @@ def render_export_panel(
     # has none of those naturally, so offering this here just produces a
     # mostly-empty export. Standard JSON above still works for any sheet type.
     st.markdown("<hr>", unsafe_allow_html=True)
+    _schema_sel = None
     if sheet_type == "CHECK_REGISTER":
         st.markdown("<p class='section-lbl'>🔌 Schema Export</p>", unsafe_allow_html=True)
         st.info(
