@@ -614,6 +614,15 @@ def render_claim_panel(
     title_fields, uploaded_name, SCHEMAS,
     _llm_map_result, _field_dup_index, _claim_dup_results,
 ):
+    # ── Eye-popup dispatcher (must run first, every script pass) ────────────
+    _eye_req = st.session_state.get("_eye_popup_request")
+    if _eye_req:
+        st.session_state.pop("_eye_popup_request")
+        show_eye_popup(
+            _eye_req["field"], _eye_req["info"],
+            _eye_req["excel_path"], _eye_req["sheet_name"],
+        )
+        
     use_conf    = st.session_state.get("use_conf_threshold", False)
     conf_thresh = st.session_state.get("conf_threshold", 80) if use_conf else 0
     active_schema = st.session_state.get("active_schema", None)
