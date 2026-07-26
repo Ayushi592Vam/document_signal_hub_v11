@@ -12,13 +12,22 @@ full-table load on every upload is the actual reason to migrate off
 JSON. For a very large sheet this means more round-trips, not fewer --
 if that becomes a real latency problem, switch to a single bulk MERGE
 using a VALUES-list source instead of per-claim MERGE calls.
+
+NOTE: this module no longer exposes _load_claim_dup_store() /
+_save_claim_dup_store() -- those were the old JSON-era whole-store
+read/write helpers. Callers that need to clear ONE claim's duplicate
+history (e.g. ui/claim_dup_panel.py's "Clear duplicate history for
+this claim" button) should use clear_claim_dup_entry(claim_id) below,
+which deletes exactly that row via delta_io.delete_row() instead of
+loading the entire table into memory, mutating a dict, and writing it
+all back.
 """
 
 import datetime
 import json
 
 from modules.audit import _append_audit
-from modules.delta_io import get_row, upsert_row, delete_all_rows
+from modules.delta_io import get_row, upsert_row, delete_all_rows, delete_row
 
 _CLAIM_DUP_TABLE = "documentsignalhub.feature_store.claim_dup_store"
 
@@ -129,5 +138,24 @@ def get_claim_dup_result(claim_id: str, dup_results: dict) -> dict | None:
     return None
 
 
+# ── NEW: single-record clear (replaces the old _load/_save whole-store pair) ─
+
+def clear_claim_dup_entry(claim_id: str) -> None:
+    """
+    Removes exactly ONE claim's duplicate-history row, keyed by dup_key.
+
+    This is what ui/claim_dup_panel.py's "Clear duplicate history for
+    this claim" button should call. It replaces the old JSON-era pattern
+    of _load_claim_dup_store() -> mutate dict -> _save_claim_dup_store(),
+    which doesn't exist anymore now that this table is Delta-backed --
+    there's no "whole store" to load into a dict in the first place.
+    """
+    if not claim_id:
+        return
+    delete_row(_CLAIM_DUP_TABLE, "dup_key", claim_id)
+
+
 def clear_claim_dup_store() -> None:
+    """Full-table clear -- used by the Cache Manager's 'Clear caches'
+    buttons, not by the per-claim clear action above."""
     delete_all_rows(_CLAIM_DUP_TABLE)
