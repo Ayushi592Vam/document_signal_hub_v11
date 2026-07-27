@@ -7,6 +7,14 @@ existing LLM fallback (schema_mapping.llm_map_unknown_fields()) --
 catches synonym-style headers (e.g. "Loss Amt Recv'd" vs "Total Paid")
 without paying for an LLM call on every single unmapped column.
 
+CHANGED: embeddings now come from a Databricks Foundation Model API
+serving endpoint (Mosaic AI Model Serving) instead of a raw urllib call
+to a separately-configured Azure OpenAI embeddings resource. This reuses
+the SAME service-principal auth (databricks.sdk.core.Config) that
+modules/delta_io.py already uses for the SQL warehouse -- no separate
+OPENAI_EMBEDDING_ENDPOINT / OPENAI_EMBEDDING_API_KEY secrets needed, and
+the call never leaves the Databricks workspace boundary.
+
 In plain terms: turns each column header and each candidate field name
 into a list of numbers (an "embedding") that captures its MEANING, then
 measures how close those numbers are (cosine similarity, 0 to 1). Close
@@ -14,29 +22,46 @@ enough = auto-map, with no LLM call at all.
 """
 
 import os
-import json
 import math
-import urllib.request
+
+from databricks.sdk import WorkspaceClient
+from databricks.sdk.core import Config
 
 _SIMILARITY_THRESHOLD = float(os.environ.get("SEMANTIC_MATCH_THRESHOLD", "0.80"))
+
+# Foundation Model API pay-per-token embedding endpoint. Override via env
+# if your workspace has a different serving endpoint name provisioned
+# (e.g. a provisioned-throughput endpoint instead of pay-per-token).
+_EMBEDDING_ENDPOINT = os.environ.get(
+    "DATABRICKS_EMBEDDING_ENDPOINT", "databricks-gte-large-en"
+)
+
 _field_embedding_cache: dict[str, list[float]] = {}
+
+_cfg: Config | None = None
+_client: WorkspaceClient | None = None
+
+
+def _get_client() -> WorkspaceClient:
+    """Reuses the same auth pattern as modules/delta_io.py's
+    _get_connection() -- one Config(), one client, cached at module level
+    rather than re-authenticating on every embedding call."""
+    global _cfg, _client
+    if _client is None:
+        _cfg = Config()
+        _client = WorkspaceClient(config=_cfg)
+    return _client
 
 
 def _get_embedding(text: str) -> list[float]:
-    endpoint   = os.environ.get("OPENAI_EMBEDDING_ENDPOINT", "").rstrip("/")
-    api_key    = os.environ.get("OPENAI_EMBEDDING_API_KEY", "")
-    api_ver    = os.environ.get("OPENAI_API_VERSION", "2024-12-01-preview")
-    deployment = os.environ.get("OPENAI_EMBEDDING_DEPLOYMENT", "text-embedding-3-small")
-    url = f"{endpoint}/openai/deployments/{deployment}/embeddings?api-version={api_ver}"
-    payload = json.dumps({"input": text}).encode()
-    req = urllib.request.Request(
-        url, data=payload,
-        headers={"Content-Type": "application/json", "api-key": api_key},
-        method="POST",
+    client = _get_client()
+    response = client.serving_endpoints.query(
+        name=_EMBEDDING_ENDPOINT,
+        input=[text],
     )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        body = json.loads(resp.read().decode())
-    return body["data"][0]["embedding"]
+    # Foundation Model API embedding responses follow the OpenAI-compatible
+    # shape: {"data": [{"embedding": [...]}]}
+    return response.data[0].embedding
 
 
 def _cosine_similarity(a: list[float], b: list[float]) -> float:
