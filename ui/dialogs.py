@@ -907,6 +907,9 @@ def show_claim_journey_dialog(
     # _skipped replaces the old _unmapped; internal only, never shown in UI
     _llm_skipped = (_llm_map_result or {}).get("_skipped",
                         (_llm_map_result or {}).get("_unmapped", []))
+    _semantic_matches = (_llm_map_result or {}).get("_semantic_matches", {})   # NEW
+    _semantic_scores  = (_llm_map_result or {}).get("_semantic_scores", {})    # NEW
+    _semantic_reverse = {v: k for k, v in _semantic_matches.items()}     
 
     _ts_schema_map = _dt.datetime.now()
     _mapped: dict = {}
@@ -1227,6 +1230,10 @@ def show_claim_journey_dialog(
         if from_title:
             method, method_color, method_icon = "TITLE ROW",    _D_PUR, "📋"
             method_fn = "parsing.py · extract_title_fields()"
+
+        elif field in _semantic_reverse:                                        # ← ADD THIS BRANCH
+            method, method_color, method_icon = "SEMANTIC MATCH", _D_BLU, "🧭"
+            method_fn = "modules.semantic_mapping · semantic_match_field() [embeddings, no LLM]"    
             
         elif llm_mapped:
             method, method_color, method_icon = "LLM MAPPED",   _D_YEL, "🤖"
@@ -1320,7 +1327,22 @@ def show_claim_journey_dialog(
         )
 
         # ── Step 2 detail: show HOW the field was matched ─────────────────────
-        if llm_mapped:
+        if field in _semantic_reverse:                                          # ← ADD THIS BRANCH
+            _src_col = _semantic_reverse.get(field, field)
+            _score   = _semantic_scores.get(_src_col, 0)
+            import os as _os_dlg
+            steps_html += (
+                f"<div style='font-size:12px;color:{_D_LBL};margin-top:2px;'>"
+                f"Source: <code style='{code_style}'>{_src_col}</code>"
+                f" → <code style='{code_style}'>{field}</code></div>"
+                f"<div style='font-size:11px;color:{_D_BLU};font-style:italic;"
+                f"margin-top:3px;padding:4px 8px;background:{_D_BLU_BG};"
+                f"border-left:2px solid {_D_BLU};border-radius:0 4px 4px 0;'>"
+                f"Cosine similarity: {_score:.3f} (threshold "
+                f"{_os_dlg.environ.get('SEMANTIC_MATCH_THRESHOLD','0.80')}) — "
+                f"text-embedding-3-small, no LLM call made</div>"
+            )
+        elif llm_mapped:
             _src_col = _llm_reverse.get(field, field)
             _reason  = _llm_reasoning.get(_src_col, "")
             steps_html += (
