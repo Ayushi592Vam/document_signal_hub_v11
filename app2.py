@@ -298,6 +298,7 @@ if "_session_start" not in st.session_state:
     st.session_state["_session_start"] = datetime.datetime.utcnow().isoformat()
 
 
+
 if "focus_field" not in st.session_state:
     st.session_state.focus_field = None
 
@@ -506,7 +507,7 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
     st.session_state["sheet_dup_info"] = {
         sn: _sheet_hash_index.get(sh) for sn, sh in sheet_hashes.items()
     }
-    
+
 else:
     file_hash    = st.session_state.get("current_file_hash", "")
     sheet_hashes = st.session_state.get("sheet_hashes", {})
@@ -911,6 +912,7 @@ _llm_map_result = {}
 _llm_map_ran    = False
 _llm_map_count  = 0
 
+
 if data and file_ext != ".pdf" and sheet_type != "CHECK_REGISTER":
     _sample_keys = list(data[0].keys())
     _ref_schema  = (
@@ -927,11 +929,13 @@ if data and file_ext != ".pdf" and sheet_type != "CHECK_REGISTER":
 
             candidate_fields = SCHEMAS[_ref_schema]["accepted_fields"]
             _semantic_mapped = {}
+            _semantic_scores = {} 
             _still_unmapped = []
             for col in _unmapped_cols:
                 matched_field, score = semantic_match_field(col, candidate_fields)
                 if matched_field:
                     _semantic_mapped[col] = matched_field
+                    _semantic_scores[col] = score 
                 else:
                     _still_unmapped.append(col)
 
@@ -940,6 +944,8 @@ if data and file_ext != ".pdf" and sheet_type != "CHECK_REGISTER":
                 _llm_map_result.setdefault("mappings", {}).update(_semantic_mapped)
             else:
                 _llm_map_result = {"mappings": _semantic_mapped}
+            _llm_map_result["_semantic_matches"] = _semantic_mapped   # NEW — col -> field, semantic only
+            _llm_map_result["_semantic_scores"]  = _semantic_scores
             _llm_map_count = len(_llm_map_result.get("mappings", {}))
             _llm_map_ran   = _llm_map_count > 0
 
@@ -1035,8 +1041,8 @@ else:
         st.stop()
 
     curr_claim = data[st.session_state.selected_idx]
-   
-    
+
+
     _frozen_id_key = f"_frozen_claim_id_{selected_sheet}_{st.session_state.selected_idx}"
     if _frozen_id_key not in st.session_state:
         st.session_state[_frozen_id_key] = detect_claim_id(curr_claim)
