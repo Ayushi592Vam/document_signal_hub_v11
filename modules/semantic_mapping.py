@@ -7,13 +7,13 @@ existing LLM fallback (schema_mapping.llm_map_unknown_fields()) --
 catches synonym-style headers (e.g. "Loss Amt Recv'd" vs "Total Paid")
 without paying for an LLM call on every single unmapped column.
 
-CHANGED: embeddings now come from a Databricks Foundation Model API
-serving endpoint (Mosaic AI Model Serving) instead of a raw urllib call
-to a separately-configured Azure OpenAI embeddings resource. This reuses
-the SAME service-principal auth (databricks.sdk.core.Config) that
-modules/delta_io.py already uses for the SQL warehouse -- no separate
-OPENAI_EMBEDDING_ENDPOINT / OPENAI_EMBEDDING_API_KEY secrets needed, and
-the call never leaves the Databricks workspace boundary.
+CHANGED: embeddings now come from Databricks Foundation Model APIs
+(the pay-per-token "databricks-gte-large-en" serving endpoint) instead
+of a direct Azure OpenAI embeddings call. This endpoint lives inside
+the workspace and is queried with the SAME Config()-based
+service-principal identity modules/volume_io.py and modules/delta_io.py
+already use -- one identity, one bill, no separate embedding secrets
+to provision or rotate.
 
 In plain terms: turns each column header and each candidate field name
 into a list of numbers (an "embedding") that captures its MEANING, then
@@ -27,40 +27,43 @@ import math
 from databricks.sdk import WorkspaceClient
 from databricks.sdk.core import Config
 
-_SIMILARITY_THRESHOLD = float(os.environ.get("SEMANTIC_MATCH_THRESHOLD", "0.80"))
+# GTE Large En is the pay-per-token embedding model Databricks hosts
+# out of the box -- no endpoint to create, no model to deploy. Override
+# via env var if you later stand up a provisioned-throughput or custom
+# embedding endpoint instead.
+_EMBEDDING_ENDPOINT = os.environ.get("DATABRICKS_EMBEDDING_ENDPOINT", "databricks-gte-large-en")
 
-# Foundation Model API pay-per-token embedding endpoint. Override via env
-# if your workspace has a different serving endpoint name provisioned
-# (e.g. a provisioned-throughput endpoint instead of pay-per-token).
-_EMBEDDING_ENDPOINT = os.environ.get(
-    "DATABRICKS_EMBEDDING_ENDPOINT", "databricks-gte-large-en"
-)
+# NOTE: cosine-similarity scores are model-specific -- they are not
+# comparable to the thresholds tuned for the old Azure OpenAI
+# text-embedding-3-small vectors. Re-tune this against a few known
+# synonym pairs from your own schemas (e.g. "Loss Amt Recv'd" -> "Total
+# Paid") before trusting the default.
+_SIMILARITY_THRESHOLD = float(os.environ.get("SEMANTIC_MATCH_THRESHOLD", "0.75"))
 
 _field_embedding_cache: dict[str, list[float]] = {}
-
-_cfg: Config | None = None
-_client: WorkspaceClient | None = None
+_client = None
 
 
 def _get_client() -> WorkspaceClient:
-    """Reuses the same auth pattern as modules/delta_io.py's
-    _get_connection() -- one Config(), one client, cached at module level
-    rather than re-authenticating on every embedding call."""
-    global _cfg, _client
+    # Same lazy-singleton pattern as modules/volume_io.py's _get_client()
+    # and modules/delta_io.py's _get_config() -- one client per app
+    # instance, reused across every call.
+    global _client
     if _client is None:
-        _cfg = Config()
-        _client = WorkspaceClient(config=_cfg)
+        _client = WorkspaceClient(config=Config())
     return _client
 
 
 def _get_embedding(text: str) -> list[float]:
-    client = _get_client()
-    response = client.serving_endpoints.query(
+    """Calls the Databricks-hosted embedding endpoint (Foundation Model
+    APIs, pay-per-token) instead of Azure OpenAI directly. Auth is
+    handled entirely by WorkspaceClient(config=Config()) -- the app's
+    own service principal, already trusted for the Volume and the SQL
+    warehouse."""
+    response = _get_client().serving_endpoints.query(
         name=_EMBEDDING_ENDPOINT,
-        input=[text],
+        input=text,
     )
-    # Foundation Model API embedding responses follow the OpenAI-compatible
-    # shape: {"data": [{"embedding": [...]}]}
     return response.data[0].embedding
 
 
