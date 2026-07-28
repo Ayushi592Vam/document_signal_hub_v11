@@ -31,7 +31,7 @@ from databricks.sdk.core import Config
 # out of the box -- no endpoint to create, no model to deploy. Override
 # via env var if you later stand up a provisioned-throughput or custom
 # embedding endpoint instead.
-_EMBEDDING_ENDPOINT = os.environ.get("DATABRICKS_EMBEDDING_ENDPOINT", "databricks-gte-large-en")
+_EMBEDDING_ENDPOINT = os.environ.get("DATABRICKS_EMBEDDING_ENDPOINT", "gte-large-en")
 
 # NOTE: cosine-similarity scores are model-specific -- they are not
 # comparable to the thresholds tuned for the old Azure OpenAI
