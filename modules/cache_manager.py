@@ -89,10 +89,12 @@ def clear_audit_log() -> int:
 
 
 def clear_export_table() -> int:
-    data = load_json(JSON_EXPORT_TABLE_PATH, default=[])
-    count = len(data)
-    save_json(JSON_EXPORT_TABLE_PATH, [])
-    return count
+    try:
+        count = count_rows(_JSON_EXPORT_TABLE)
+        delete_all_rows(_JSON_EXPORT_TABLE)
+        return count
+    except Exception:
+        return 0
 
 
 def clear_llm_cost_log() -> int:
