@@ -1,51 +1,77 @@
 """
 modules/json_export_table.py
-Tracks every generated JSON export (upsert by filename+sheet+type).
+Tracks every generated JSON export, now backed by a Delta table
+(documentsignalhub.feature_store.json_export_table), upserted by a
+derived key of filename|sheet|type via delta_io.upsert_row().
 
-UPDATE: now carries `cost_metadata` alongside each export record, so
-LLM token/cost data persists with the data it produced instead of living
-only in ephemeral st.session_state["_llm_cost_log"].
+MIGRATION NOTE: previously a single JSON blob on the Volume, rewritten
+in full on every export. delta_io.upsert_row() already does a MERGE
+INTO with match-and-replace semantics, so there's no need to load the
+whole table, scan for a matching entry, and write everything back --
+that full-rewrite pattern is exactly what this migration removes.
 """
 
-from modules.volume_io import load_json, save_json
-from config.settings import JSON_EXPORT_TABLE_PATH
+import datetime
+import json
+
+from modules.delta_io import upsert_row, delete_all_rows, read_rows
+
+_TABLE = "documentsignalhub.feature_store.json_export_table"
+
+
+def _make_dup_key(filename: str, sheet: str, export_type: str) -> str:
+    return f"{filename}|{sheet}|{export_type}"
 
 
 def _load_json_export_table() -> list:
-    return load_json(JSON_EXPORT_TABLE_PATH, default=[])
-
-
-def _save_json_export_table(table: list) -> None:
-    save_json(JSON_EXPORT_TABLE_PATH, table)
+    """Full-table read. Reconstructs the original entry dicts from Delta
+    rows -- kept for any caller that needs every export record."""
+    rows = read_rows(_TABLE)
+    out = []
+    for r in rows:
+        try:
+            record = json.loads(r["record_json"] or "{}")
+        except Exception:
+            record = {}
+        record.setdefault("filename", r.get("filename"))
+        record.setdefault("sheet", r.get("sheet"))
+        record.setdefault("type", r.get("export_type"))
+        record.setdefault("record_count", r.get("record_count"))
+        record.setdefault("timestamp", str(r.get("export_time", "")))
+        out.append(record)
+    return out
 
 
 def _append_json_export(entry: dict, cost_metadata: dict | None = None) -> None:
     """
-    entry: the existing export record shape (filename, sheet, timestamp,
-    type, record_count, json).
-    cost_metadata: optional dict, e.g.
-        {
-          "calls": 3,
-          "prompt_tokens": 1450,
-          "completion_tokens": 320,
-          "total_cost_usd": 0.0071,
-          "models_used": ["gpt-4.1-mini"],
-        }
-    Pass st.session_state.get("_llm_cost_log", []) filtered to entries
-    for this doc_name, summed into the shape above, at the call site.
+    entry: filename, sheet, timestamp, type, record_count, json.
+    cost_metadata: optional dict (calls, prompt_tokens, completion_tokens,
+    total_cost_usd, models_used).
+
+    Upserts ONE row keyed by filename|sheet|type -- same "most recent
+    wins" behavior as the old JSON-era code, just without the
+    load-entire-list-then-rewrite step.
     """
     if cost_metadata is not None:
         entry = {**entry, "cost_metadata": cost_metadata}
 
-    table = _load_json_export_table()
-    for existing in table:
-        if (
-            existing.get("filename") == entry.get("filename")
-            and existing.get("sheet") == entry.get("sheet")
-            and existing.get("type") == entry.get("type")
-        ):
-            existing.update(entry)
-            _save_json_export_table(table)
-            return
-    table.append(entry)
-    _save_json_export_table(table)
+    filename    = entry.get("filename", "")
+    sheet       = entry.get("sheet", "")
+    export_type = entry.get("type", "")
+    dup_key     = _make_dup_key(filename, sheet, export_type)
+
+    upsert_row(_TABLE, "dup_key", {
+        "dup_key":      dup_key,
+        "filename":     filename,
+        "sheet":        sheet,
+        "export_type":  export_type,
+        "export_time":  entry.get("timestamp", datetime.datetime.now().isoformat()),
+        "record_count": int(entry.get("record_count", 0) or 0),
+        "record_json":  json.dumps(entry),
+    })
+
+
+def clear_json_export_table() -> None:
+    """Full-table clear -- used by the Cache Manager's export-history
+    clear action."""
+    delete_all_rows(_TABLE)
