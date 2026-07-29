@@ -21,7 +21,7 @@ _CLAIM_DUP_TABLE    = "documentsignalhub.feature_store.claim_dup_store"
 _AUDIT_LOG_TABLE    = "documentsignalhub.feature_store.audit_log"
 _LLM_COST_TABLE     = "documentsignalhub.feature_store.llm_cost_log"
 _ADI_COST_TABLE     = "documentsignalhub.feature_store.adi_cost_log"
-
+_JSON_EXPORT_TABLE = "documentsignalhub.feature_store.json_export_table"
 
 # ── Individual clear functions ────────────────────────────────────────────────
 
