@@ -39,11 +39,33 @@ CREATE TABLE IF NOT EXISTS documentsignalhub.feature_store.hash_store (
 -- The `json` field itself is a large nested blob (exportDate, sheetMeta,
 -- records with per-cell edit tracking) -- kept as a string rather than
 -- exploded into columns, since its internal shape depends on the sheet type.
-CREATE TABLE IF NOT EXISTS documentsignalhub.feature_store.json_export_table (
+DROP TABLE IF EXISTS documentsignalhub.feature_store.json_export_table;
+
+CREATE TABLE documentsignalhub.feature_store.json_export_table (
+  dup_key       STRING,   -- filename|sheet|type — the upsert key
   filename      STRING,
   sheet         STRING,
-  export_time   TIMESTAMP,
   export_type   STRING,
+  export_time   TIMESTAMP,
   record_count  INT,
-  export_json   STRING   -- the full nested JSON blob, unchanged from current format
+  record_json   STRING    -- full entry (export JSON blob + cost_metadata), serialized
+) USING DELTA;
+
+CREATE TABLE IF NOT EXISTS documentsignalhub.feature_store.llm_cost_log (
+  ts               STRING,
+  purpose          STRING,
+  model            STRING,
+  prompt_tokens    INT,
+  output_tokens    INT,
+  total_tokens     INT,
+  cost_usd         DOUBLE,
+  log_date         STRING
+) USING DELTA;
+
+CREATE TABLE IF NOT EXISTS documentsignalhub.feature_store.adi_cost_log (
+  model      STRING,
+  pages      INT,
+  cost       DOUBLE,
+  timestamp  STRING,
+  doc_name   STRING
 ) USING DELTA;
