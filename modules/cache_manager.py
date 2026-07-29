@@ -139,7 +139,10 @@ def get_cache_stats() -> dict:
         except Exception:
             stats[key] = {"entries": 0}
 
-    stats["export_table"] = {"entries": len(load_json(JSON_EXPORT_TABLE_PATH, default=[]))}
+    try:
+        stats["export_table"] = {"entries": count_rows(_JSON_EXPORT_TABLE)}
+    except Exception:
+        stats["export_table"] = {"entries": 0}
 
     return stats
 
