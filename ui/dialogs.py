@@ -1234,6 +1234,10 @@ def show_claim_journey_dialog(
         elif field in _semantic_reverse:                                        # ← ADD THIS BRANCH
             method, method_color, method_icon = "SEMANTIC MATCH", _D_BLU, "🧭"
             method_fn = "modules.semantic_mapping · semantic_match_field() [embeddings, no LLM]"    
+
+        elif field in _llm_map_result.get("_memory_matches", {}).values():
+            method, method_color, method_icon = "MEMORY MATCH", _D_GRN, "🧠"
+            method_fn = "modules.mapping_memory · lookup_many() [prior mapping, no LLM/semantic call]"
             
         elif llm_mapped:
             method, method_color, method_icon = "LLM MAPPED",   _D_YEL, "🤖"
