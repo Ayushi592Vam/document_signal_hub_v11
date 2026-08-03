@@ -69,3 +69,16 @@ CREATE TABLE IF NOT EXISTS documentsignalhub.feature_store.adi_cost_log (
   timestamp  STRING,
   doc_name   STRING
 ) USING DELTA;
+
+CREATE TABLE IF NOT EXISTS documentsignalhub.feature_store.field_mapping_memory (
+  mapping_key               STRING,     -- upsert key: "<schema_name>|<normalized_source_column>"
+  schema_name                STRING,
+  source_column_raw           STRING,
+  source_column_normalized     STRING,
+  resolved_field                STRING,
+  method                          STRING,   -- 'semantic' | 'llm' | 'user'
+  confidence                     DOUBLE,
+  hit_count                      INT,
+  last_confirmed_at              TIMESTAMP,
+  user_corrected                 BOOLEAN
+) USING DELTA;
