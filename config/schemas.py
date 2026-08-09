@@ -140,6 +140,12 @@ _HARDCODED_SCHEMAS: dict = {
             "Job Title", "Body Part", "Vehicle ID", "At Fault",
             "Building Damage", "Contents Damage", "Business Interruption Loss",
             "Net Paid", "Services Involved", "Location",
+            # NEW — canonical fields produced by parsing.py's title-KV pass
+            # (see extract_sheet_title_kvs()). Without these, the values are
+            # extracted correctly but map_claim_to_schema() never asks for
+            # them, so they're silently dropped on export.
+            "Contract Number", "Underwriting Period Start",
+            "Underwriting Period End", "Program Year",
         ],
         "field_aliases": {
             "Claim Number":      ["claim_id","claim number","claim no","claim#","claimid","claim ref","claim #","file no","file number","file#","ref no","ref number","reference no","reference number","loss ref"],
@@ -176,6 +182,11 @@ _HARDCODED_SCHEMAS: dict = {
             "Net Paid":          ["net paid","pd paid","property damage paid","net claim payment","net disbursed"],
             "Services Involved": ["services involved","professional services","service type","services rendered"],
             "Location":          ["location","property location","site","premises","loss location","risk location","address"],
+            # NEW — aliases for the newly-accepted canonical fields
+            "Contract Number":   ["contract number","contract no","contract #","contract","contract ref"],
+            "Underwriting Period Start": ["underwriting period start","underwriting start","underwriting period from"],
+            "Underwriting Period End":   ["underwriting period end","underwriting end","underwriting period to"],
+            "Program Year":      ["program year","policy year","treaty year"],
         },
     },
     "Duck Creek": {
@@ -204,6 +215,14 @@ _HARDCODED_SCHEMAS: dict = {
             "Notes", "Job Title", "Body Part", "Vehicle ID", "At Fault",
             "Building Damage", "Contents Damage", "Business Interruption Loss",
             "Net Paid", "Services Involved", "Property Location", "Coverage",
+            # NEW — canonical fields produced by parsing.py's title-KV pass.
+            # "Carrier" (not "Carrier Name") is included separately because the
+            # title_fields dict from extract_sheet_title_kvs() keys on the
+            # canonical name "Carrier" exactly; map_claim_to_schema() only
+            # picks up a title field when the schema_field string matches that
+            # key exactly, so an alias alone would not have been enough.
+            "Contract Number", "Underwriting Period Start",
+            "Underwriting Period End", "Program Year", "Carrier",
         ],
         "field_aliases": {
             "Claim Id":          ["claim_id","claim number","claim no","claim#","claimid","claim ref","claim #","file no","file number","ref no","reference no","loss ref"],
@@ -239,6 +258,12 @@ _HARDCODED_SCHEMAS: dict = {
             "Services Involved": ["services involved","professional services","service type"],
             "Property Location": ["location","property location","site","premises","loss location","risk location","address"],
             "Coverage":          ["coverage","coverage type","type of coverage","subject to $50k sir","within policy limits","coverage under review"],
+            # NEW — aliases for the newly-accepted canonical fields
+            "Contract Number":   ["contract number","contract no","contract #","contract","contract ref"],
+            "Underwriting Period Start": ["underwriting period start","underwriting start","underwriting period from"],
+            "Underwriting Period End":   ["underwriting period end","underwriting end","underwriting period to"],
+            "Program Year":      ["program year","policy year","treaty year"],
+            "Carrier":           ["carrier","carrier name","underwriter"],
         },
     },
 }
