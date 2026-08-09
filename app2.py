@@ -795,6 +795,7 @@ if selected_sheet not in st.session_state.sheet_cache:
                 "total_cols":     total_cols,
                 "sheet_name":     selected_sheet,
                 "col_rename_log": _col_rename_log,
+                "title_kvs_raw":  _title_kvs_raw,   # NEW
             })
 
     else:
