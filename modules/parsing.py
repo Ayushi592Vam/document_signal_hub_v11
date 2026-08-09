@@ -16,6 +16,7 @@ import os
 import re
 
 import openpyxl
+import datetime as _dt
 
 from modules.cell_format import format_cell_value_with_fmt
 MAX_EXCEL_ROWS = 50_000  # sanity ceiling — a legitimate loss run is nowhere near this
@@ -441,22 +442,103 @@ _LABEL_ALIASES: dict[str, str] = {
     "line of business": "Line of Business",
     "lob":              "Line of Business",
     "coverage":         "Coverage Type",
+
+     # ── NEW: labels this file's banner actually uses ──────────────────────────
+    "period ended": "Valuation Date", "period ending": "Valuation Date",
+    "period end": "Valuation Date", "as at": "Valuation Date",
+    "underwriting period": "Underwriting Period",
+    "policy period": "Policy Period", "coverage period": "Policy Period",
+    "contract number": "Contract Number", "contract no": "Contract Number",
+    "contract #": "Contract Number", "contract": "Contract Number",
+    "carrier": "Carrier", "carrier name": "Carrier", "underwriter": "Carrier",
+    "assured": "Insured Name", "account": "Insured Name",
+    "program year": "Program Year", "claims administrator": "TPA Name",
+
 }
+
+# Labels whose VALUE is a date range get split into two fields, matching the
+# naming extract_title_fields() already emits for merged-cell banners.
+_RANGE_FIELDS = {
+    "Underwriting Period": ("Underwriting Period Start", "Underwriting Period End"),
+    "Policy Period":       ("Policy Period Start", "Policy Period End"),
+}
+
+_DATE_TOKEN = (
+    r"(\d{1,2}\s+[A-Za-z]{3,9}\s+\d{2,4}"
+    r"|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4}"
+    r"|\d{1,2}[/\-\.]\d{1,2}[/\-\.]\d{2,4}"
+    r"|\d{4}-\d{2}-\d{2})"
+)
+
+_RANGE_PAT = re.compile(
+    rf"^{_DATE_TOKEN}\s*(?:to|through|thru|[\u2013\u2014\-])\s*{_DATE_TOKEN}$", re.IGNORECASE
+)
+
+_COMPANY_SUFFIX = re.compile(
+    r"\b(llc|l\.l\.c|inc|inc\.|incorporated|corp|corporation|co\.|co|company|ltd|limited|"
+    r"lp|llp|plc|holdings|group|partners|properties|associates|enterprises|"
+    r"ins\.?|insurance|assurance|underwriters|mgmt|management|trust|estates)\b",
+    re.IGNORECASE,
+)
+
+# Same vocabulary as extract_title_fields()'s lob_map, so both paths agree.
+_LOB_MAP = [
+    (r"workers[\u2019'\s\-]*comp(?:ensation)?", "Workers Compensation"),
+    (r"commercial\s+general\s+liability",       "Commercial General Liability"),
+    (r"commercial\s+auto(?:mobile)?",           "Commercial Auto"),
+    (r"commercial\s+prop(?:erty)?",             "Commercial Property"),
+    (r"professional\s+liability",               "Professional Liability"),
+    (r"general\s+liability",                    "General Liability"),
+    (r"\bumbrella\b",                           "Umbrella"),
+    (r"\bexcess\s+casualty\b",                  "Excess Casualty"),
+    (r"\binland\s+marine\b",                    "Inland Marine"),
+    (r"\bcyber\b",                              "Cyber"),
+]
+
+_NOTE_PAT   = re.compile(r"^\(.*\)$|^(see|note|source|continued)\b", re.IGNORECASE)
+_LABELISH   = re.compile(r"^[A-Za-z][A-Za-z0-9 &/#.'\-]{1,38}$")
+_VALUE_LIKE = re.compile(r"^[\dA-Z]")
 
 
 def _canonical_label(raw: str) -> str | None:
-    key = raw.strip().rstrip(":").lower()
+    key = re.sub(r"\s+", " ", str(raw).strip().rstrip(":").lower())
     return _LABEL_ALIASES.get(key)
 
 
 def _try_inline_kv(cell_text: str) -> list[tuple[str, str]]:
     pairs = []
-    segments = re.split(r'\s{3,}|\|', str(cell_text))
-    for seg in segments:
+    for seg in re.split(r'\s{3,}|\|', str(cell_text)):
         m = re.match(r'^([A-Za-z][^:]{0,40}):\s*(.+)$', seg.strip())
         if m:
             pairs.append((m.group(1).strip(), m.group(2).strip()))
     return pairs
+
+
+def _looks_like_label(text: str) -> bool:
+    """A banner label cell. Accepts a known alias, a trailing colon, OR a short
+    ALL-CAPS caption with no digits -- which is how print-style loss runs write
+    'PERIOD ENDED' in the cell to the left of its value."""
+    t = str(text).strip()
+    if not t or len(t.split()) > 5 or not _LABELISH.match(t):
+        return False
+    if _canonical_label(t) or t.endswith(":"):
+        return True
+    letters = [ch for ch in t if ch.isalpha()]
+    return bool(letters) and all(ch.isupper() for ch in letters) and not re.search(r"\d", t)
+
+
+def _classify_banner(text: str) -> tuple[str, str] | None:
+    """Unlabelled banner line -> (field, value). '_COMPANY_' means 'an org name,
+    caller decides whether it's the carrier or the insured by position'."""
+    t = str(text).strip()
+    if not t or _NOTE_PAT.match(t):
+        return None
+    for pat, lob in _LOB_MAP:
+        if re.search(pat, t, re.IGNORECASE):
+            return "Line of Business", lob
+    if _COMPANY_SUFFIX.search(t):
+        return "_COMPANY_", t
+    return None
 
 
 def extract_sheet_title_kvs(
@@ -465,99 +547,143 @@ def extract_sheet_title_kvs(
     header_row_idx: int | None,
     sheet_name: str,
 ) -> dict:
+    """
+    Three passes per banner row, instead of the old single-cell special case:
+      1. "LABEL: value" inside one cell            (CONTRACT NUMBER:PLIC/25)
+      2. label cell + value cell to its right      (PERIOD ENDED | 12/31/2025)
+      3. unlabelled caption lines                  (AR LLC, Commercial Property)
+    A cell consumed by an earlier pass is never re-read by a later one, so the
+    same text can't land in two fields.
+    """
     scan_limit = header_row_idx if header_row_idx is not None else min(15, len(raw_rows))
     found: dict = {}
+    company_seen = 0
 
-    def _store(canonical: str, value: str, excel_row: int, excel_col: int):
-        if canonical not in found and str(value).strip():
-            found[canonical] = {
-                "value":     str(value).strip(),
-                "original":  str(value).strip(),
-                "modified":  str(value).strip(),
-                "source":    "title_kv",
-                "excel_row": excel_row,
-                "excel_col": excel_col,
-            }
+    def _disp(r_idx: int, c_idx: int, fallback) -> str:
+        """Displayed value -- honours the cell's number format so a real date
+        reads '12/31/2025', not '2025-12-31 00:00:00'. This is what cell_rows
+        was passed in for; the old body never touched it."""
+        try:
+            return format_cell_value_with_fmt(cell_rows[r_idx][c_idx])
+        except Exception:
+            if isinstance(fallback, (_dt.datetime, _dt.date)):
+                return fallback.strftime("%m/%d/%Y")
+            return str(fallback).strip()
+
+    def _store(canonical: str, value: str, excel_row: int, excel_col: int,
+               source: str = "title_kv") -> None:
+        value = str(value).strip()
+        if not canonical or not value:
+            return
+        if canonical in _RANGE_FIELDS:
+            m = _RANGE_PAT.match(value)
+            if m:
+                s_field, e_field = _RANGE_FIELDS[canonical]
+                _store(s_field, m.group(1), excel_row, excel_col, source)
+                _store(e_field, m.group(2), excel_row, excel_col, source)
+                return
+        if canonical in found:
+            return
+        found[canonical] = {
+            "value":     value,
+            "original":  value,
+            "modified":  value,
+            "source":    source,
+            "excel_row": excel_row,
+            "excel_col": excel_col,
+        }
 
     for r_idx, row in enumerate(raw_rows[:scan_limit]):
         excel_row = r_idx + 1
-        non_empty = [
-            (c_idx, v) for c_idx, v in enumerate(row)
-            if v is not None and str(v).strip()
-        ]
+        non_empty = [(c, v) for c, v in enumerate(row) if v is not None and str(v).strip()]
         if not non_empty:
             continue
 
-        if len(non_empty) == 1:
-            c_idx, val = non_empty[0]
-            val_s = str(val).strip()
-            if re.match(r'^[\d$,()\-\.]+$', val_s):
-                continue
-            if ":" not in val_s:
-                if r_idx == 0:
-                    tpa_name = re.split(r'\s*[\u2014\u2013]\s*', val_s)[0].strip()
-                    if ' - ' in tpa_name:
-                        parts = tpa_name.split(' - ', 1)
-                        if re.search(r'\b(report|run|detail|summary|schedule|listing)\b',
-                                     parts[1], re.IGNORECASE):
-                            tpa_name = parts[0].strip()
-                    _store("TPA Name", tpa_name, excel_row, c_idx + 1)
-                else:
-                    lob_match = re.search(
-                        r'(?:loss\s+run\s+report\s*[—\-–]+\s*'
-                        r'|annual\s+loss\s+run\s*[—\-–]+\s*'
-                        r'|program\s+year\s+\d{4}\s*[—\-–]?\s*)(.+)',
-                        val_s, re.IGNORECASE,
-                    )
-                    if lob_match:
-                        _store("Sheet Title", lob_match.group(1).strip(), excel_row, c_idx + 1)
-                    else:
-                        _store("Sheet Title", val_s, excel_row, c_idx + 1)
-                continue
+        consumed: set[int] = set()
 
+        # ── Pass 1: "LABEL: value" within a single cell ──────────────────────
         for c_idx, val in non_empty:
-            val_s = str(val).strip()
+            val_s = _disp(r_idx, c_idx, val)
             if ":" in val_s and not re.match(r'^\d', val_s):
                 for raw_label, raw_value in _try_inline_kv(val_s):
                     canonical = _canonical_label(raw_label)
                     if canonical:
                         _store(canonical, raw_value, excel_row, c_idx + 1)
+                        consumed.add(c_idx)
 
+        # ── Pass 2: label cell + adjacent value cell ─────────────────────────
         i = 0
-        cells = non_empty
-        while i < len(cells) - 1:
-            c_label_idx, label_val = cells[i]
-            c_value_idx, value_val = cells[i + 1]
-            label_s = str(label_val).strip()
-            value_s = str(value_val).strip()
-            is_label = (
-                label_s.endswith(":")
-                or _canonical_label(label_s) is not None
-            )
-            if is_label and ":" in label_s and not label_s.endswith(":"):
+        while i < len(non_empty) - 1:
+            c_label_idx, label_val = non_empty[i]
+            c_value_idx, value_val = non_empty[i + 1]
+            label_s = _disp(r_idx, c_label_idx, label_val)
+            value_s = _disp(r_idx, c_value_idx, value_val)
+
+            if c_label_idx in consumed or (":" in label_s and not label_s.endswith(":")):
                 i += 1
                 continue
-            if is_label:
-                canonical = (
-                    _canonical_label(label_s.rstrip(":").strip())
-                    or _canonical_label(label_s)
-                )
+            # <=3 columns apart: a label and its value sit side by side. Without
+            # this, two unrelated cells at opposite ends of a wide banner row
+            # get paired as label/value.
+            if (_looks_like_label(label_s)
+                    and (c_value_idx - c_label_idx) <= 3
+                    and _VALUE_LIKE.match(value_s)):
+                canonical = _canonical_label(label_s)
                 if canonical:
                     _store(canonical, value_s, excel_row, c_value_idx + 1)
-                i += 2
+                    consumed.update({c_label_idx, c_value_idx})
+                    i += 2
+                    continue
+            i += 1
+
+        # ── Pass 3: unlabelled caption lines ─────────────────────────────────
+        # A caption is short and wide. A row with 4+ populated cells is a header
+        # or data row that leaked inside the scan window -- legacy two-row
+        # headers do exactly this -- so never read it as prose.
+        if len(non_empty) >= 4:
+            continue
+
+        for c_idx, val in non_empty:
+            if c_idx in consumed:
+                continue
+            val_s = _disp(r_idx, c_idx, val)
+            if ":" in val_s or re.match(r'^[\d$,()\-\.]+$', val_s):
+                continue
+
+            if r_idx == 0 and "TPA Name" not in found:
+                tpa = re.split(r'\s*[\u2014\u2013]\s*', val_s)[0].strip()
+                if ' - ' in tpa:
+                    head, tail = tpa.split(' - ', 1)
+                    if re.search(r'\b(report|run|detail|summary|schedule|listing)\b',
+                                 tail, re.IGNORECASE):
+                        tpa = head.strip()
+                _store("TPA Name", tpa, excel_row, c_idx + 1, "title_banner")
+                if _COMPANY_SUFFIX.search(tpa):
+                    company_seen += 1
+                    _store("Carrier", tpa, excel_row, c_idx + 1, "title_banner")
+                continue
+
+            hit = _classify_banner(val_s)
+            if hit and hit[0] == "_COMPANY_":
+                # First org name in the banner is the paper; the next one down
+                # is the insured. Matches how these reports are laid out.
+                company_seen += 1
+                _store("Carrier" if company_seen == 1 else "Insured Name",
+                       hit[1], excel_row, c_idx + 1, "title_banner")
+            elif hit:
+                _store(hit[0], hit[1], excel_row, c_idx + 1, "title_banner")
             else:
-                i += 1
+                lob_m = re.search(
+                    r'(?:loss\s+run\s+report|annual\s+loss\s+run)\s*[\u2014\-\u2013]+\s*(.+)',
+                    val_s, re.IGNORECASE,
+                )
+                _store("Sheet Title", lob_m.group(1).strip() if lob_m else val_s,
+                       excel_row, c_idx + 1, "title_banner")
 
-    if "Sheet Name" not in found:
-        found["Sheet Name"] = {
-            "value":     sheet_name,
-            "original":  sheet_name,
-            "modified":  sheet_name,
-            "source":    "sheet_tab",
-            "excel_row": 0,
-            "excel_col": 0,
-        }
-
+    found.setdefault("Sheet Name", {
+        "value": sheet_name, "original": sheet_name, "modified": sheet_name,
+        "source": "sheet_tab", "excel_row": 0, "excel_col": 0,
+    })
     return found
 
 def _warn_uncalculated_formulas(file_path: str, sheet_name: str) -> int:
@@ -580,6 +706,7 @@ def _warn_uncalculated_formulas(file_path: str, sheet_name: str) -> int:
         return count
     except Exception:
         return 0
+
 
 
 # ── Main entry point ──────────────────────────────────────────────────────────
@@ -625,11 +752,18 @@ def extract_from_excel(
                 f"file and re-upload."                                           # NEW
             )                                                                    # NEW
         sheet_type, sheet_confidence = classify_sheet(raw_rows)
-        hri        = _find_header_row(raw_rows)
-        title_kvs  = extract_sheet_title_kvs(raw_rows, cell_rows, hri, sheet_name)
+
+        # Use the same header detection as the row parser so the title scan
+        # and data extraction agree on where the header begins.
+        if _is_legacy_print_layout(raw_rows):
+            legacy_pair = _find_legacy_header_rows(raw_rows)
+            hri = legacy_pair[0] if legacy_pair else _find_header_row(raw_rows)
+        else:
+            hri = _find_header_row(raw_rows)
+
+        title_kvs = extract_sheet_title_kvs(raw_rows, cell_rows, hri, sheet_name)
         claims, sheet_type = parse_rows_with_cells(sheet_type, raw_rows, cell_rows)
         return claims, sheet_type, title_kvs, sheet_confidence
-
 
 # ── Row parsers ───────────────────────────────────────────────────────────────
 
