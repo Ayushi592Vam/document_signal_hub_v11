@@ -84,21 +84,31 @@ def render_sheet_card(
 
     # ── Title metadata KV card ────────────────────────────────────────────────
     if title_kvs:
-        skip_keys = {"Sheet Name"}
-        display_kvs = {k: v for k, v in title_kvs.items() if k not in skip_keys}
-        if display_kvs:
-            rows_html = "".join(
-                f"<div style='display:flex;gap:10px;align-items:baseline;"
-                f"padding:6px 0;border-bottom:1px solid #e8ecf4;'>"
-                f"<span style='font-size:10px;font-weight:800;color:#4a5578;"
-                f"font-family:monospace;text-transform:uppercase;letter-spacing:1.2px;"
-                f"min-width:150px;flex-shrink:0;'>{k}</span>"
-                f"<span style='font-size:13px;color:#0f1117;font-family:monospace;"
-                f"font-weight:500;'>"
-                f"{v.get('value', '') if isinstance(v, dict) else str(v)}"
-                f"</span></div>"
-                for k, v in display_kvs.items()
-                if (v.get('value', '') if isinstance(v, dict) else str(v)).strip()
+    skip_keys = {"Sheet Name"}
+    display_kvs = {k: v for k, v in title_kvs.items() if k not in skip_keys}
+    if display_kvs:
+        rows_html = "".join(
+            f"<div style='display:flex;gap:10px;align-items:baseline;"
+            f"padding:6px 0;border-bottom:1px solid #e8ecf4;'>"
+            f"<span style='font-size:10px;font-weight:800;color:#4a5578;"
+            f"font-family:monospace;text-transform:uppercase;letter-spacing:1.2px;"
+            f"min-width:150px;flex-shrink:0;'>{k}</span>"
+            f"<span style='font-size:13px;color:#0f1117;font-family:monospace;"
+            f"font-weight:500;'>"
+            f"{v.get('value', '') if isinstance(v, dict) else str(v)}"
+            f"</span></div>"
+            for k, v in display_kvs.items()
+            if (v.get('value', '') if isinstance(v, dict) else str(v)).strip()
+        )
+        if rows_html:   # NEW — actually render the block that was just built
+            st.markdown(
+                "<div class='sheet-card' style='margin-top:8px;padding:12px 16px;'>"
+                "<div style='font-size:9px;font-weight:800;color:#4a5578;"
+                "font-family:monospace;text-transform:uppercase;"
+                "letter-spacing:1.5px;margin-bottom:6px;'>Extracted Title / Banner Fields</div>"
+                + rows_html +
+                "</div>",
+                unsafe_allow_html=True,
             )
             
     
