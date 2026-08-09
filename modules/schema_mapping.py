@@ -83,8 +83,12 @@ def detect_claim_id(row: dict, index: int | None = None) -> str:
     import re as _re
     for k, v in row.items():
         val = str(v.get("modified") or v.get("value") or "").strip()
-        if _re.match(r"^[A-Z]{2,5}[-_]?[A-Z0-9]{2,15}$", val, _re.IGNORECASE):
+        if (
+            _re.match(r"^[A-Z]{2,5}[-_]?[A-Z0-9]{2,15}$", val, _re.IGNORECASE)
+            and _re.search(r"\d", val)   # NEW — require at least one digit, so pure-alpha
+        ):                                #       words (status values, names) can't qualify
             return val
+           
     if index is not None:
         return str(index + 1)
     return ""
