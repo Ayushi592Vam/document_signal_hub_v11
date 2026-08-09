@@ -812,8 +812,14 @@ if selected_sheet not in st.session_state.sheet_cache:
         try:
             merged_meta = extract_merged_cell_metadata(excel_path, selected_sheet)
             totals_data = extract_totals_row(excel_path, selected_sheet)
+            
             _title_flds = extract_title_fields(merged_meta)
-            # PATCH 6C — cache for Transformation Journey (cache-load path)
+            
+            _cached_title_kvs = _cached.get("title_kvs_raw", {})
+            for _tk, _tv in _cached_title_kvs.items():
+                if _tk not in _title_flds:
+                    _title_flds[_tk] = _tv
+            
             st.session_state[f"_merged_meta_{selected_sheet}"] = merged_meta
             st.session_state[f"_title_fields_{selected_sheet}"] = _title_flds
         except Exception:
