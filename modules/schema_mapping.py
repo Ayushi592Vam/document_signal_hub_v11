@@ -21,6 +21,7 @@ import streamlit as st
 from config.settings import MIN_HEADER_MATCH
 from modules.audit import _append_audit
 from modules.llm import _llm_available, _llm_call
+from modules.parsing import _classify_banner
 
 
 # ── Date parsing helper ───────────────────────────────────────────────────────
@@ -42,7 +43,7 @@ def _try_parse_date(value: str):
 
 # ── Utility ───────────────────────────────────────────────────────────────────
 
-   
+    
 
 def detect_claim_id(row: dict, index: int | None = None) -> str:
     # Check-register rows key off Check Number, not Claim Number -- multiple
@@ -52,13 +53,14 @@ def detect_claim_id(row: dict, index: int | None = None) -> str:
         "check number", "check no", "check #", "check num",
         "cheque number", "cheque no",
     ]
+
     for k, v in row.items():
         name = str(k).lower().replace("_", " ").strip()
         if any(x in name for x in _CHECK_NO_KEYS):
             val = v.get("modified") or v.get("value")
             if val and str(val).strip():
                 return str(val)
-              
+
     keys = [
         "claim id", "claim_id", "claimid", "claim number", "claim no",
         "claim #", "claim ref", "claim reference", "file number", "record id",
@@ -448,7 +450,8 @@ def extract_title_fields(merged_meta: dict) -> dict:
                 matched_semantically = True
                 break
 
-        # ── RAW FALLBACK: store every unmatched merged region as-is ──────────
+        # ── RAW FALLBACK: classify first, then store every remaining
+        #    unmatched merged region as-is ─────────────────────────────────
         if not matched_semantically:
             kv_split = re.match(r'^([^:\-]{3,40})[:\-]\s*(.+)$', text, re.IGNORECASE)
             if kv_split:
@@ -457,12 +460,32 @@ def extract_title_fields(merged_meta: dict) -> dict:
                 raw_val = kv_split.group(2).strip()
             else:
                 # No separator — this is a plain label/name cell (e.g. "AR LLC",
-                # "Print Excess Ins. Co"). Use region position as the key so we
-                # don't use the cell VALUE as the field name (avoids duplicates
-                # like "AR LLC" appearing as both a value AND a key).
-                _region_type_label = m.get("type", "TITLE").title()
-                raw_key = f"{_region_type_label} [{region_key}]"
-                raw_val = text
+                # "Print Excess Ins. Co"). Before falling back to a positional
+                # key, try classifying it as an unlabelled banner caption (an
+                # org name or a line-of-business string) via the same
+                # _classify_banner() used by parsing.py's title-KV pass. This
+                # is what correctly turns "AR LLC" into an Insured Name and
+                # "Print Excess Ins. Co" into a Carrier, instead of dumping
+                # them under junk keys like "Title [R1C5]".
+                banner_hit = _classify_banner(text)
+                if banner_hit:
+                    field, val = banner_hit
+                    if field == "_COMPANY_":
+                        # First org name in the banner is the carrier/paper;
+                        # the next one down is the insured -- mirrors the
+                        # ordering convention in parsing.py's title-KV pass.
+                        _company_count = sum(1 for k in found if k in ("Carrier", "Insured Name"))
+                        field = "Carrier" if _company_count == 0 else "Insured Name"
+                    raw_key = field
+                    raw_val = val
+                else:
+                    # Still unclassified — use region position as the key so
+                    # we don't use the cell VALUE as the field name (avoids
+                    # duplicates like "AR LLC" appearing as both a value AND
+                    # a key).
+                    _region_type_label = m.get("type", "TITLE").title()
+                    raw_key = f"{_region_type_label} [{region_key}]"
+                    raw_val = text
 
             # Avoid overwriting semantic fields with the same name
             store_key = raw_key if raw_key not in found else f"{raw_key} [{region_key}]"
