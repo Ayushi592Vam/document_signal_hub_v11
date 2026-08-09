@@ -929,15 +929,16 @@ if data and file_ext != ".pdf" and sheet_type != "CHECK_REGISTER":
             _unmapped_cols = [c for c in _sample_keys if not _best_standard_name(c)]
 
             candidate_fields = SCHEMAS[_ref_schema]["accepted_fields"]
+
             # ── Step 0: check mapping memory before paying for semantic/LLM ──
             _remembered = mapping_memory.lookup_many(_ref_schema, _unmapped_cols)   # NEW
             _memory_mapped = {c: r["resolved_field"] for c, r in _remembered.items()}  # NEW
             _cols_to_resolve = [c for c in _unmapped_cols if c not in _memory_mapped]  # NEW
-        
+
             _semantic_mapped = {}
             _semantic_scores = {} 
             _still_unmapped = []
-            for col in _cols_to_resolve: 
+            for col in _cols_to_resolve:
                 matched_field, score = semantic_match_field(col, candidate_fields)
                 if matched_field:
                     _semantic_mapped[col] = matched_field
@@ -948,15 +949,16 @@ if data and file_ext != ".pdf" and sheet_type != "CHECK_REGISTER":
             if _still_unmapped:
                 _llm_map_result = llm_map_unknown_fields(data[:5], _ref_schema, selected_sheet)
                 _llm_map_result.setdefault("mappings", {}).update(_semantic_mapped)
+                
             else:
                 _llm_map_result = {"mappings": _semantic_mapped}
-            _llm_map_result["mappings"].update(_memory_mapped)    
+            _llm_map_result["mappings"].update(_memory_mapped)     
             _llm_map_result["_semantic_matches"] = _semantic_mapped   # NEW — col -> field, semantic only
             _llm_map_result["_semantic_scores"]  = _semantic_scores
             _llm_map_result["_memory_matches"]   = _memory_mapped 
-
-            # ── Write newly-resolved mappings back into memory ────────────────
-            _to_remember = [                                            # NEW
+            
+             # ── Write newly-resolved mappings back into memory ────────────────
+            _to_remember = [
                 {"source_column": c, "resolved_field": f, "method": "semantic",
                  "confidence": _semantic_scores.get(c, 0.0) * 100}
                 for c, f in _semantic_mapped.items()
@@ -966,7 +968,9 @@ if data and file_ext != ".pdf" and sheet_type != "CHECK_REGISTER":
                 for c, f in (_llm_map_result.get("mappings", {}) or {}).items()
                 if c not in _memory_mapped and c not in _semantic_mapped
             ]
-            mapping_memory.remember_batch(_ref_schema, _to_remember)   # NEW
+            mapping_memory.remember_batch(_ref_schema, _to_remember)      # NEW
+
+
             _llm_map_count = len(_llm_map_result.get("mappings", {}))
             _llm_map_ran   = _llm_map_count > 0
 
