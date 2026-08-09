@@ -65,6 +65,7 @@ def detect_claim_id(row: dict, index: int | None = None) -> str:
         "claim id", "claim_id", "claimid", "claim number", "claim no",
         "claim #", "claim ref", "claim reference", "file number", "record id",
         "claim number", "clm id", "clm no", "clm#", "loss ref",
+        "file num", "file #", "filenum",   # NEW — catches abbreviated "FILE NUM" headers
     ]
     for k, v in row.items():
         name = str(k).lower().replace("_", " ").strip()
