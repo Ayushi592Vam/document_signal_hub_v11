@@ -335,7 +335,18 @@ uploaded = st.file_uploader(
 )
 
 if not uploaded:
+    st.session_state.pop("_confirmed_upload", None)   # NEW — clear confirmation once the file is removed
     st.stop()
+
+# ── NEW: gate processing behind an explicit Submit click ─────────────────────
+_pending_fingerprint = f"{uploaded.name}_{uploaded.file_id}"
+if st.session_state.get("_confirmed_upload") != _pending_fingerprint:
+    st.info(f"📄 **{uploaded.name}** selected — click Submit to process it.")
+    if st.button("Submit", type="primary"):
+        st.session_state["_confirmed_upload"] = _pending_fingerprint
+        st.rerun()
+    st.stop()
+# ── everything below this line only runs after Submit has been clicked ───────
 
 if "tmpdir" not in st.session_state:
     st.session_state.tmpdir = tempfile.mkdtemp()
