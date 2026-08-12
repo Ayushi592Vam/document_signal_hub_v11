@@ -346,7 +346,11 @@ if st.session_state.get("_confirmed_upload") != _pending_fingerprint:
         st.session_state["_confirmed_upload"] = _pending_fingerprint
         st.rerun()
     st.stop()
-# ── everything below this line only runs after Submit has been clicked ───────
+
+# ── NEW: progress bar appears the instant this rerun starts ──────────────────
+_progress_ph = st.empty()
+_progress_ph.progress(5, text="Submit accepted — preparing file…")
+# ──────────────────────────────────────────────────────────────────────────
 
 if "tmpdir" not in st.session_state:
     st.session_state.tmpdir = tempfile.mkdtemp()
@@ -363,8 +367,10 @@ _upload_fingerprint = f"{uploaded.name}_{uploaded.file_id}"
 if st.session_state.get("last_uploaded") != _upload_fingerprint:
     _file_bytes = uploaded.getvalue()
     from modules.guardrails import validate_upload
+    _progress_ph.progress(15, text="Validating upload…")   # NEW
     _ok, _reason = validate_upload(_file_bytes, uploaded.name, file_ext)
     if not _ok:
+        _progress_ph.empty() 
         st.error(f"⚠ Upload rejected: {_reason}")
         st.stop()
     with open(excel_path, "wb") as f:
@@ -443,7 +449,7 @@ if st.session_state.get("last_uploaded") != _upload_fingerprint:
             
     
 
-    
+    _progress_ph.progress(30, text="Computing file hash…") 
     file_hash = _compute_file_sha256(excel_path)
     file_ext  = os.path.splitext(excel_path)[1].lower()
 
@@ -596,7 +602,12 @@ if selected_sheet not in st.session_state.sheet_cache:
             _cached = None
 
     if not _cached:
+        _progress_ph.progress(55, text=f"Reading '{selected_sheet}'…")
         with st.spinner(f"Reading '{selected_sheet}'…"):
+
+            _title_kvs_raw = {}   # NEW — default so non-Excel branches don't NameError
+                      # at the _save_to_feature_store() call below;
+                      # only the Excel/CSV branch actually populates this.
 
             # ── PDF branch ────────────────────────────────────────────────────
             if file_ext == ".pdf":
@@ -823,14 +834,14 @@ if selected_sheet not in st.session_state.sheet_cache:
         try:
             merged_meta = extract_merged_cell_metadata(excel_path, selected_sheet)
             totals_data = extract_totals_row(excel_path, selected_sheet)
-            
+
             _title_flds = extract_title_fields(merged_meta)
-            
+
             _cached_title_kvs = _cached.get("title_kvs_raw", {})
             for _tk, _tv in _cached_title_kvs.items():
                 if _tk not in _title_flds:
                     _title_flds[_tk] = _tv
-            
+
             st.session_state[f"_merged_meta_{selected_sheet}"] = merged_meta
             st.session_state[f"_title_fields_{selected_sheet}"] = _title_flds
         except Exception:
@@ -940,7 +951,9 @@ if data and file_ext != ".pdf" and sheet_type != "CHECK_REGISTER":
     )
     _needs_llm_map = _has_unknown_fields(_sample_keys, _ref_schema)
     if _needs_llm_map:
-        try:
+        _progress_ph.progress(85, text="Mapping unfamiliar columns…")   # NEW
+        with st.spinner("🔎 Mapping unfamiliar columns…"):
+          try:
             from modules.semantic_mapping import semantic_match_field
             from modules.normalization import _best_standard_name
             from modules import mapping_memory  
@@ -1002,7 +1015,7 @@ if data and file_ext != ".pdf" and sheet_type != "CHECK_REGISTER":
                     )
                     data = active["data"]
                     active["_llm_renamed"] = True
-        except Exception as _e:
+          except Exception as _e:
             from modules.audit import _log_error
             _log_error("SEMANTIC_FIELD_MAP", uploaded.name, _e)
             st.warning(f"⚠ Semantic field mapping skipped due to an error: {_e}")
@@ -1043,6 +1056,9 @@ if not _use_intel_panel:
 # if _llm_map_ran:
 #     from ui.sheet_card import render_llm_map_banner
 #     render_llm_map_banner(_llm_map_result, _llm_map_count)
+
+_progress_ph.progress(100, text="Done")   # NEW
+_progress_ph.empty()                      # NEW — remove the bar, hand off to normal UI
 
 # ── Sheet card ────────────────────────────────────────────────────────────────
 if file_ext not in (".pdf", ".txt", ".html", ".htm"):
